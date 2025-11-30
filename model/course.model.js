@@ -1,0 +1,34 @@
+import mongoose from "mongoose";
+
+const moduleSchema = mongoose.Schema({
+    title:{type:String,required:true},
+    videoUrl:{type:String,required:true},
+    videoPublicId:{type:String},
+    videoSizeBytes:{type:Number},
+    moduleDuration:{type:Number},
+    order:{type:Number,required:true},
+    createdAt:{type:Date,default:Date.now},
+    updatedAt:{type:Date}
+})
+
+const courseSchema = mongoose.Schema({
+    title:{type:String,required:true},
+    description:{type:String,required:true},
+    price:{type:Number,required:true},
+    thumbnailUrl:{type:String,required:true},
+    category:{type:String,required:true},
+    tags:{type:[String]},
+    instructor:{type:mongoose.Schema.Types.ObjectId,ref:"userAuth",required:true,index:true},
+    modules:[moduleSchema],
+    courseDuration:{type:Number},
+    isPublished:{type:Boolean,default:false},
+    publishedAt:{type:Date},
+    createdAt:{type:Date,default:Date.now},
+    updatedAt:{type:Date},
+})
+
+courseSchema.index({title:"text"})
+courseSchema.index({category:1})
+courseSchema.index({tags:1})
+const authCourse = mongoose.model("course",courseSchema)
+export default authCourse
