@@ -1,5 +1,10 @@
 import authCourse from "../model/course.model.js"
 import redisClient from "../config/redis.js"
+import cloudinary from "../config/cloudinary.js"
+import upload from "../middleware/multer.middleware.js"
+import fs from "fs"
+import { verificationRequestModel } from "../model/verificationRequest.model.js"
+
 
 export const createCourse = async(req,res) => {
     try {
@@ -56,5 +61,26 @@ export const updateCourse = async(req,res) => {
         res.status(200).json({message:"Course updated",course})
     } catch (error) {
         res.status(500).json(error)
+    }
+}
+
+export const instructorVerification = async(req,res) => {
+    try {
+        const {highestQualification, experienceYears, portfolioLink} = req.body
+        const resumeFile = req.file
+        if(!resumeFile) return res.status(400).json({message:"Resume is required"})
+        const user = req.user._id
+        if(!user) return res.status(400).json({message:"User id not found"})
+        if(!highestQualification) return res.status(400).json({message:"Highest qualification field is required"})
+        const pendingRequest = await verificationRequestModel.findOne({user,status:"pending"})
+        if(pendingRequest) return res.status(400).json({message:"Your verification request is in pending state"})
+        const result = await cloudinary.uploader.upload(req.file.path)
+        fs.unlinkSync(req.file.path)
+        const verificationRequest = new verificationRequestModel({user,highestQualification,experienceYears,portfolioLink,status:"pending",resumeUrl:result.url,resumePublicId:result.public_id})
+        verificationRequest.save()
+        res.status(201).json({message:"Verification request created"})
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({message:"Internal server error",error})
     }
 }

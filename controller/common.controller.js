@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs"
-import unblockRequestValidation from "../validation/unblockRequest.js"
+import unblockRequestValidation from "../validation/unblockRequest.validation.js"
 import userAuth from "../model/user.model.js"
 import { unblockRequestModel } from "../model/unblockRequest.model.js"
 

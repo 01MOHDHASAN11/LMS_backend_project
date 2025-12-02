@@ -1,8 +1,8 @@
 import express from "express"
 import { changePassword, forgetPassword, logout, refreshToken, resetPassword, signin, signup, verifyEmail } from "../controller/auth.controller.js"
 import { verifyToken } from "../middleware/protectedRoute.middleware.js"
-import {authLimiter} from "../middleware/authRateLimit.js"
-import { isUserBlocked } from "../middleware/isUserBlocked.js"
+import {authLimiter} from "../middleware/authRateLimit.middleware.js"
+import { isUserBlocked } from "../middleware/isUserBlocked.middleware.js"
 
 const auth = express.Router()
 auth.post("/signup",authLimiter({keyPrefix:"signup",maxEmail:5,maxIP:10,windowInSeconds:3600}),signup)
