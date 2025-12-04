@@ -8,6 +8,7 @@ const verificationRequestSchema = mongoose.Schema({
     resumeUrl:{type:String,required:true},
     status:{type:String,enum:["pending","approved","rejected"],default:"pending"},
     adminMessage:{type:String},
+    resumePublicId:{type:String},
     createdAt:{type:Date, default:Date.now},
     reviewedAt:{type:Date}
 })

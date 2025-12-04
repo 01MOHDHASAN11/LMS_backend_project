@@ -1,12 +1,18 @@
 import express from "express"
 import { authorize } from "../middleware/authorize.middleware.js"
-import { blockUserController,checkUserRequest, getPendingUserRequest, updateUserBlockStatus } from "../controller/adminController.js"
+import { blockUserController,checkUserRequest, getInstructorVerificationRequest, getPendingUserRequest, getSingleVerificationRequest, updateInstructorVerificationRequest, updateUserBlockStatus } from "../controller/adminController.js"
 import { verifyToken } from "../middleware/protectedRoute.middleware.js"
 const adminRoute = express.Router()
 
-adminRoute.put("/get-user/:userId",verifyToken,authorize("admin"),blockUserController)
-adminRoute.get("/review-unblock/get-users",verifyToken,authorize("admin"),checkUserRequest)
-adminRoute.put("/status/update-user/:requestId",verifyToken,authorize("admin"),updateUserBlockStatus)
-adminRoute.get("/pending-request",verifyToken,authorize("admin"),getPendingUserRequest)
+adminRoute.use(verifyToken,authorize("admin"))
+adminRoute.put("/get-user/:userId",blockUserController)
+adminRoute.get("/review-unblock/get-users",checkUserRequest)
+adminRoute.put("/status/update-user/:requestId",updateUserBlockStatus)
+adminRoute.get("/pending-request",getPendingUserRequest)
 
+
+// Instructor verification request(pending/approved/rejected with filter and pagination)
+adminRoute.get("/verification/request",getInstructorVerificationRequest)
+adminRoute.get("/verification/request/:id",getSingleVerificationRequest)
+adminRoute.patch("/verification/request/:id",updateInstructorVerificationRequest)
 export default adminRoute

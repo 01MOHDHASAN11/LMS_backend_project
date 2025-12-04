@@ -2,10 +2,14 @@ import userAuth from "../model/user.model.js"
 import { blockUser, updateUserBlockStatusValidation } from "../validation/blockUser.validation.js"
 import { unblockRequestModel } from "../model/unblockRequest.model.js"
 import { sendUnblockStatusEmail } from "../utils/adminUnblockStatusUpdateEmail.js"
+import { verificationRequestModel } from "../model/verificationRequest.model.js"
+import updateInstructorVerificationRequestValidation from "../validation/updateInstructorRequest.js"
 export const adminDashBoard = (req,res) => {
     res.json({message:`Welcome admin ${req.user.name}`})
 }
 
+
+// User requests for unblock
 export const blockUserController = async(req,res) => {
 try {
     const {error} = blockUser.validate(req.body)
@@ -112,4 +116,72 @@ try {
     res.status(500).json({message:"Internal server error",error})
 }
 
+}
+
+
+// Instructor verification controller
+export const getInstructorVerificationRequest = async(req,res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 20
+        const page = parseInt(req.query.page) || 1
+        const sort = req.query.sort
+        const status = req.query.status
+        const sortOrder = (sort==="desc") ? -1 : 1
+        const skip = (page-1)*limit
+        let filter = {}
+        if(status){
+            filter.status=status
+        }
+    
+        const allRequests = await verificationRequestModel
+        .find(filter)
+        .sort({createdAt:sortOrder})
+        .skip(skip)
+        .limit(limit)
+        .populate("user","name email")
+
+        const totalDocuments = await verificationRequestModel.countDocuments()
+        res.status(200).json({
+            page,
+            limit,
+            totalDocuments,
+            pages:Math.ceil(totalDocuments/limit),
+            allRequests
+        })
+
+    } catch (error) {
+        res.status(500).json({message:"Internal server error",error})
+    }
+}
+
+export const getSingleVerificationRequest = async(req,res) => {
+    try {
+        const {id} = req.params
+        const requestData = await verificationRequestModel.findById(id).populate("user","name resumeUrl email")
+        if(!requestData) return res.status(400).json({message:"Request data not found"})
+        res.status(200).json({requestData})
+    
+    } catch (error) {
+        res.status(500).json({message:"Internal server error",error})
+    }
+}
+
+export const updateInstructorVerificationRequest = async(req,res) => {
+    try {
+        const {id} = req.params
+        const {status,adminMessage=""} = req.body
+        const {error} = updateInstructorVerificationRequestValidation.validate(req.body)
+        if(error) return res.status(400).json({message:error.details[0].message})
+        const updateRequest = await verificationRequestModel.findByIdAndUpdate(id,{status,adminMessage},{new:true})
+        if(!updateRequest) return res.status(404).json({message:"No request found"})
+        const instructorVerifiedBoolean = status==="approved" ? true : false
+        const instructor = await userAuth.findByIdAndUpdate(updateRequest.user,{instructorVerified:instructorVerifiedBoolean},{new:true})
+        if(!instructor) return res.status(404).json({message:"Instructor not found"})
+        res.status(200).json({
+            message:"Status updated successfully",
+            data:updateRequest
+        })        
+    } catch (error) {
+        res.status(500).json({message:"Internal server error",error})
+    }
 }

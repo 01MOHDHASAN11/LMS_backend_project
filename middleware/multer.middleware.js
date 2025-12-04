@@ -24,7 +24,9 @@ const storage = multer.diskStorage({
     },
     filename:(req,file,cb)=>{
         if(file.mimetype==="application/pdf"){
-            cb(null,file.originalname)
+            let ext = file.originalname.split(".")[1]
+            let fileName = file.originalname.split(".")[0]
+            cb(null,`${fileName}+${Date.now()}.${ext}`)
         }
         else{
             cb(new Error("Only pdf files are allowed"),null)
