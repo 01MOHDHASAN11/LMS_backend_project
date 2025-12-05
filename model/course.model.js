@@ -17,7 +17,7 @@ const courseSchema = mongoose.Schema({
     price:{type:Number,required:true},
     thumbnailUrl:{type:String,required:true},
     category:{type:String,required:true},
-    tags:{type:[String]},
+    tags:{type:[String],required:true},
     instructor:{type:mongoose.Schema.Types.ObjectId,ref:"userAuth",required:true,index:true},
     modules:[moduleSchema],
     courseDuration:{type:Number},

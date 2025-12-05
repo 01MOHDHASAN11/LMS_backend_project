@@ -2,7 +2,7 @@ import express from "express"
 import { verifyToken } from "../middleware/protectedRoute.middleware.js"
 import { authorize } from "../middleware/authorize.middleware.js"
 import { createCourse, getAllCourses, instructorVerification, updateCourse, viewInstructorVerificationRequests} from "../controller/instructorController.js"
-import upload from "../middleware/multer.middleware.js"
+import upload from "../middleware/uploadResume.middleware.js"
 import { getInstructorVerificationRequest } from "../controller/adminController.js"
 const instructorRoute = express.Router()
 

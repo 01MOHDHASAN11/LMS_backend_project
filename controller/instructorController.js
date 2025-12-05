@@ -1,29 +1,13 @@
 import authCourse from "../model/course.model.js"
 import redisClient from "../config/redis.js"
 import cloudinary from "../config/cloudinary.js"
-import upload from "../middleware/multer.middleware.js"
+import upload from "../middleware/uploadResume.middleware.js"
 import fs from "fs"
 import { verificationRequestModel } from "../model/verificationRequest.model.js"
 
 
 
-export const createCourse = async(req,res) => {
-    try {
-    const instructorId = req.user._id
-    redisClient.del(`instructor:${instructorId}`)
-    const course = await authCourse.create({
-        title:req.body.title,
-        description:req.body.description,
-        instructor:instructorId
-    })
-    return res.status(200).json({
-        message:"New course created successfully",
-        course
-    })
-    } catch (error) {
-        res.status(500).json(error)
-    }
-}
+
 
 export const getAllCourses = async(req,res) =>{
     try {
@@ -114,6 +98,15 @@ export const viewInstructorVerificationRequests = async(req,res) => {
         })
     } catch (error) {
         res.status(500).json({message:"Internal server error"})
+    }
+}
+
+
+export const createCourse = async(req,res) =>{
+    try {
+        
+    } catch (error) {
+        
     }
 }
 

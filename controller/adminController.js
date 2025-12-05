@@ -1,7 +1,7 @@
 import userAuth from "../model/user.model.js"
 import { blockUser, updateUserBlockStatusValidation } from "../validation/blockUser.validation.js"
 import { unblockRequestModel } from "../model/unblockRequest.model.js"
-import { sendUnblockStatusEmail } from "../utils/adminUnblockStatusUpdateEmail.js"
+import { sendInstructorVerificationEmail, sendUnblockStatusEmail } from "../utils/adminUnblockStatusUpdateEmail.js"
 import { verificationRequestModel } from "../model/verificationRequest.model.js"
 import updateInstructorVerificationRequestValidation from "../validation/updateInstructorRequest.js"
 export const adminDashBoard = (req,res) => {
@@ -172,15 +172,17 @@ export const updateInstructorVerificationRequest = async(req,res) => {
         const {status,adminMessage=""} = req.body
         const {error} = updateInstructorVerificationRequestValidation.validate(req.body)
         if(error) return res.status(400).json({message:error.details[0].message})
-        const updateRequest = await verificationRequestModel.findByIdAndUpdate(id,{status,adminMessage},{new:true})
+        const updateRequest = await verificationRequestModel.findByIdAndUpdate(id,{status,adminMessage,reviewedAt:Date.now()},{new:true}).populate("user","name email")
         if(!updateRequest) return res.status(404).json({message:"No request found"})
         const instructorVerifiedBoolean = status==="approved" ? true : false
         const instructor = await userAuth.findByIdAndUpdate(updateRequest.user,{instructorVerified:instructorVerifiedBoolean},{new:true})
         if(!instructor) return res.status(404).json({message:"Instructor not found"})
+        sendInstructorVerificationEmail(updateRequest.user.email,updateRequest.user.name,updateRequest.status,updateRequest.adminMessage)
+        .then(()=>console.log("Email send to the instructor")).catch(err=>console.log(err))
         res.status(200).json({
             message:"Status updated successfully",
-            data:updateRequest
-        })        
+            updateRequest
+        })
     } catch (error) {
         res.status(500).json({message:"Internal server error",error})
     }
