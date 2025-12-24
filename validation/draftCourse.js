@@ -9,7 +9,7 @@ const moduleValidation = Joi.object({
     order:Joi.number().required()
 })
 
-export const courseValidation = Joi.object({
+export const draftCourseValidation = Joi.object({
     title:Joi.string().custom((value,helper)=>{
         const wordCount = value.trim().split(/\s+/).length
         if(wordCount<3){
@@ -25,8 +25,6 @@ export const courseValidation = Joi.object({
         return value
     }).required(),
     price:Joi.number().required().default(0),
-    thumbnailUrl:Joi.string().required(),
     category:Joi.string().required(),
-    tags:Joi.array().items(Joi.string()).required(),
-    modules:Joi.array().items(moduleValidation).required()
+    tags:Joi.array().items(Joi.string()).required()
 })

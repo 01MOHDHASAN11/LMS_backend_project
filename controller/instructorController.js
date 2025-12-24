@@ -4,6 +4,7 @@ import cloudinary from "../config/cloudinary.js"
 import upload from "../middleware/uploadResume.middleware.js"
 import fs from "fs"
 import { verificationRequestModel } from "../model/verificationRequest.model.js"
+import { draftCourseValidation } from "../validation/draftCourse.js"
 
 
 
@@ -102,11 +103,55 @@ export const viewInstructorVerificationRequests = async(req,res) => {
 }
 
 
-export const createCourse = async(req,res) =>{
+export const createCourseDraft = async(req,res) =>{
+    let result
     try {
+        const instructorId = req.user._id
+        const existingDraft = await authCourse.findOne({
+            instructor:instructorId,
+            isPublished:false
+        })
+        if(existingDraft){
+            return res.status(409).json({message:"You already have a draft course please complete or publish it before adding new draft"})
+        }
+        const {price,description,title,category,tags} = req.body
+        const parseTags = JSON.parse(req.body.tags)
+        const thumbnailUrl = req.file
+        if(!thumbnailUrl){
+            return res.status(400).json({message:"Thumbnail is required"})
+        }
+        const {error} = draftCourseValidation.validate({...req.body,tags:parseTags})
+        if(error){
+            return res.status(400).json({message:error.details[0].message})
+        }
         
+        result = await cloudinary.uploader.upload(req.file.path,{
+            folder:"thumbnail",
+            resource_type:"auto",
+            access_mode:"public"
+        })
+        fs.unlinkSync(req.file.path)
+        const draftCourse = new authCourse({
+            instructor:instructorId,
+            thumbnailUrl:result.secure_url,
+            tags:parseTags,
+            thumbnailUrlPublicId:result.public_id,
+            price,
+            description,
+            title,
+            category,
+            modules:[],
+            courseDuration:0,
+            isPublished:false,
+            publishedAt:null,
+            createdAt:Date.now()})
+        await draftCourse.save()
+        res.status(201).json({message:"Course draft created successfully"})
     } catch (error) {
-        
+        if(result?.public_id){
+            await cloudinary.uploader.destroy(result.public_id)
+        }
+        res.status(500).json({message:"Internal server error",error})
     }
 }
 
