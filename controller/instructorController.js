@@ -5,6 +5,7 @@ import upload from "../middleware/uploadResume.middleware.js"
 import fs from "fs"
 import { verificationRequestModel } from "../model/verificationRequest.model.js"
 import { draftCourseValidation } from "../validation/draftCourse.js"
+import mongoose from "mongoose"
 
 
 
@@ -102,56 +103,168 @@ export const viewInstructorVerificationRequests = async(req,res) => {
     }
 }
 
-
+const MAX_DRAFT_COURSES = 20
 export const createCourseDraft = async(req,res) =>{
-    let result
+    const session = await mongoose.startSession()
+    let uploadResult=null
     try {
-        const instructorId = req.user._id
-        const existingDraft = await authCourse.findOne({
-            instructor:instructorId,
-            isPublished:false
-        })
-        if(existingDraft){
-            return res.status(409).json({message:"You already have a draft course please complete or publish it before adding new draft"})
+        let parsedTags
+        try {
+            parsedTags = JSON.parse(req.body.tags)
+        } catch (error) {
+            return res.status(400).json({message:"Invalid tags format"})
         }
-        const {price,description,title,category,tags} = req.body
-        const parseTags = JSON.parse(req.body.tags)
+        const instructorId = req.user._id               
+        const {price,description,title,category} = req.body
         const thumbnailUrl = req.file
         if(!thumbnailUrl){
             return res.status(400).json({message:"Thumbnail is required"})
         }
-        const {error} = draftCourseValidation.validate({...req.body,tags:parseTags})
+        const {error} = draftCourseValidation.validate({...req.body,tags:parsedTags})
         if(error){
             return res.status(400).json({message:error.details[0].message})
         }
-        
-        result = await cloudinary.uploader.upload(req.file.path,{
-            folder:"thumbnail",
-            resource_type:"auto",
-            access_mode:"public"
+        uploadResult = await cloudinary.uploader.upload(req.file.path,{
+        folder:"thumbnail",
+        resource_type:"auto",
+        access_mode:"public"
         })
-        fs.unlinkSync(req.file.path)
-        const draftCourse = new authCourse({
+        await session.withTransaction(async()=>{
+            const limitDraft = await authCourse.findOne(
+                {
+                    instructor:instructorId,
+                    status:{$in:["draft","review","archived"]}
+                }
+            ).skip(MAX_DRAFT_COURSES).select({_id:1}).session(session)
+
+            if(limitDraft){
+                throw new Error("DRAFT_LIMIT_EXCEEDED")
+            }
+
+        await authCourse.create(
+            [{
             instructor:instructorId,
-            thumbnailUrl:result.secure_url,
-            tags:parseTags,
-            thumbnailUrlPublicId:result.public_id,
+            thumbnailUrl:uploadResult.secure_url,
+            tags:parsedTags,
+            thumbnailUrlPublicId:uploadResult.public_id,
             price,
             description,
             title,
             category,
             modules:[],
             courseDuration:0,
-            isPublished:false,
+            status:"draft",
             publishedAt:null,
-            createdAt:Date.now()})
-        await draftCourse.save()
-        res.status(201).json({message:"Course draft created successfully"})
+            createdAt:Date.now()
+        }],{session}
+        )
+        })
+    res.status(201).json({message:"Course draft created successfully"})
     } catch (error) {
-        if(result?.public_id){
-            await cloudinary.uploader.destroy(result.public_id)
+        if(error.message==="DRAFT_LIMIT_EXCEEDED"){
+            res.status(409).json({message:"Too many draft or review courses. Please publish existing courses first."})
         }
+        if(uploadResult?.public_id){
+            await cloudinary.uploader.destroy(uploadResult.public_id)
+        }
+        console.log(error)
         res.status(500).json({message:"Internal server error",error})
+    }
+    finally{
+        if(req.file?.path){
+            fs.unlink(req.file.path,()=>{})
+        }
+        session.endSession()
+    }
+}
+
+export const addCourseModule = async(req,res) => {
+    const instructor = req.user._id
+    const {draftCourseId} = req.params
+    const {title,videoTitles} = req.body
+    const files = req.files
+    let uploadedVideos
+
+    if(!mongoose.Types.ObjectId.isValid(draftCourseId)){
+        return res.status(400).json({message:"Invalid course id"})
+    }
+    if(!title || typeof title !=="string" || title.trim().length===0){
+        return res.status(400).json({message:"Title is required and its type must be string"})
+    }
+    if(!videoTitles){
+        return res.status(400).json({message:"videoTitles are required"})
+    }
+    const parsedVideoTitles = JSON.parse(videoTitles)
+    const normalizedVideoTitles = Array.isArray(parsedVideoTitles) ? parsedVideoTitles : [parsedVideoTitles]
+    if(normalizedVideoTitles.length !== files.length){
+        return res.status(400).json({
+            message: "Number of video titles must match number of uploaded videos"
+        })
+    }
+
+    const course = await authCourse.findOne({
+        instructor,
+        status:"draft",
+        _id:draftCourseId
+    })
+    if(!files || files.length===0){
+        return res.status(400).json({message:"At least one video is required"})
+    }
+    const moduleTitle = title.trim()
+    if(!moduleTitle){
+        return res.status(400).json({message:"Module title is required"})
+    }
+    if(!course){
+        return res.status(404).json({message:"Draft course not found"})
+    }
+    const moduleOrder = course.modules.length+1
+
+    try {
+    uploadedVideos = await Promise.all(
+        files.map((file,index)=>(
+            cloudinary.uploader.upload(file.path,{
+                folder:"videos",
+                resource_type:"video"
+            }).then(result=>({
+                title:normalizedVideoTitles[index].trim(),
+                videoUrl:result.secure_url,
+                videoPublicId:result.public_id,
+                videoSizeInBytes:result.bytes,
+                order:index+1,
+                duration:result.duration,
+                createdAt:Date.now(),
+                updatedAt:Date.now()
+            }))
+        ))
+    )
+    const newModule = {
+            title:moduleTitle,
+            videos:uploadedVideos,
+            moduleDuration:uploadedVideos.reduce((seconds,video)=>seconds+(video.duration || 0),0),
+            order:moduleOrder,
+            createdAt:Date.now(),
+            updatedAt:Date.now()
+        }
+        course.modules.push(newModule)
+        course.courseDuration=course.modules.reduce((total,module)=>total+(module.moduleDuration || 0),0)
+        await course.save()
+        res.status(201).json({message:"Module created successfully"})
+    } catch (error) {
+        if(uploadedVideos?.length){
+            await Promise.all(
+                uploadedVideos.map((videos)=>{
+                return cloudinary.uploader.destroy(videos.videoPublicId,{resource_type:"video"})
+            })
+            )
+            
+        }
+        console.log(error)
+        res.status(500).json({message:"Internal server error",error})
+    }
+    finally{
+        files.forEach((file)=>{
+            fs.unlink(file.path,()=>{})
+        })
     }
 }
 

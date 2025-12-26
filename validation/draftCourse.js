@@ -6,7 +6,6 @@ const moduleValidation = Joi.object({
     videoPublicId:Joi.string().trim().optional(),
     videoSizeBytes:Joi.number().optional(),
     moduleDuration:Joi.number().optional(),
-    order:Joi.number().required()
 })
 
 export const draftCourseValidation = Joi.object({

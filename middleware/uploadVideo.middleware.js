@@ -34,4 +34,4 @@ const storage = multer.diskStorage({
     }
 })
 
-export const upload = multer({storage,limits:{fileSize:100*1024*1024}})
+export const moduleVideoUpload = multer({storage,limits:{fileSize:100*1024*1024}})
