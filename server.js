@@ -44,13 +44,21 @@ app.use(xss())
 app.use(hpp())
 app.use(cors())
 app.use(globalLimiter)
-
 app.use(morgan("dev"))
+
 app.use("/api/auth",auth)
 app.use("/admin",adminRoute)
 app.use("/instructor",instructorRoute)
 app.use("/common",commonRoutes)
 
+
+app.use((err,req,res,next)=>{
+  console.log("Global error middleware: ",err)
+  res.status(500).json({
+    success:false,
+    message:"Internal server error"
+  })
+})
 
 app.listen(port,()=>{
     console.log(`Server is running on port ${port}`)

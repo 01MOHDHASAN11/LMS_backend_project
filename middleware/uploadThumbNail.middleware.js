@@ -27,7 +27,7 @@ const storage = multer.diskStorage({
             return cb(new Error("Only '.jpg', '.jpeg', '.png', '.webp', '.avif' extensions are allowed"),null)
         }
         if(!allowedMimeTypes.includes(file.mimetype)){
-            return cb(new Error("'image/jpeg', 'image/png', 'image/webp', 'image/avif'"),null)
+            return cb(new Error("Only 'image/jpeg', 'image/png', 'image/webp', 'image/avif' mimeType are allowed"),null)
         }
         cb(null,`${file.originalname.split(".")[0]}${Date.now()}${extName}`)
 

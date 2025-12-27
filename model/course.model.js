@@ -34,7 +34,7 @@ const courseSchema = mongoose.Schema({
     status:{type:String,enum:["draft","review","published","archived"]},
     publishedAt:{type:Date},
     createdAt:{type:Date,default:Date.now},
-    updatedAt:{type:Date},
+    updatedAt:{type:Date,default:null},
 })
 
 courseSchema.index({title:"text"})
