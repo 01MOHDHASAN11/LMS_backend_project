@@ -8,6 +8,7 @@ import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 
 
+
 export const getAllCourses = async (req, res) => {
   try {
     let cacheKey = `instructor:${req.user._id}`;
@@ -466,4 +467,294 @@ export const reorderVideos = async (req,res) => {
         })
     }
 
+}
+
+
+export const deleteModule = async (req,res) => {
+  const session = await mongoose.startSession()
+  let updatedCourse
+  session.startTransaction()
+  let {courseId,moduleId} = req.params
+  let instructorId = req.user._id
+  if(!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(moduleId)){
+    await session.abortTransaction()
+    return res.status(400).json({success:false,message:"Invalid courseId or moduleId"})
+  }
+  try {
+    const existingCourse = await authCourse.findOne({
+      instructor:instructorId,
+      status:"draft",
+      _id:courseId
+    }).session(session)
+    if(!existingCourse){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,message:"Course not found"})
+    }
+    const existingModule = existingCourse.modules.find((modId)=>modId._id.toString()===moduleId.toString())
+    if(!existingModule){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,message:"Module not found"})
+    }
+
+    const result = await authCourse.updateOne(
+      {
+      _id:courseId,
+      instructor:instructorId,
+      status:"draft"
+      },
+      {
+        $pull:{modules:{_id:moduleId}}
+      }, 
+      {session}
+  )
+    if(result.modifiedCount===0){
+      await session.abortTransaction()
+      return res.status(409).json(
+        {success:false,message:"Video already deleted"}
+      )
+    }
+    updatedCourse = await authCourse.findOne({_id:courseId,instructor:instructorId,status:"draft"}).session(session)
+    updatedCourse.modules = updatedCourse.modules.map((mod,index)=>{
+      mod.order=index+1,
+      mod.updatedAt=Date.now()
+      return mod
+    })
+    updatedCourse.courseDuration = updatedCourse.modules.reduce((currTime,time)=>currTime+(time.moduleDuration || 0),0)
+    updatedCourse.updatedAt = Date.now()
+    await updatedCourse.save({session})
+    await session.commitTransaction()
+
+    if(existingModule.videos.length>0){
+      try {
+        await Promise.allSettled(
+      existingModule.videos.map((video)=>{
+        if(video.videoPublicId){
+          return cloudinary.uploader.destroy(video.videoPublicId,{
+            resource_type:"video"
+          })
+        }
+      })
+    )
+      } catch (error) {
+        console.log("cloudinary video cleanup error: ",error)
+      }
+    }
+
+    res.status(200).json(
+      {
+        success:true,
+        message:"Module deleted successfully",
+        modules:updatedCourse.modules,
+        courseDuration:updatedCourse.courseDuration
+      })
+  } catch (error) {
+    console.error("Error: ",error)
+    await session.abortTransaction()
+    res.status(500).json({success:false,message:"Internal server error"})
+  }
+  finally{
+    session.endSession()
+  }
+}
+
+export const deleteVideo = async (req,res) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  const {courseId,moduleId,videoId} = req.params
+  const instructorId = req.user._id
+  if(!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(moduleId) || !mongoose.Types.ObjectId.isValid(videoId)){
+    await session.abortTransaction()
+    return res.status(400).json({success:false,message:"Invalid courseId, moduleId or videoId"})
+  }
+  try {
+    const existingCourse = await authCourse.findOne({
+      _id:courseId,
+      instructor:instructorId,
+      status:"draft"
+    }).session(session)
+    if(!existingCourse){
+      await session.abortTransaction()
+      return res.status(400).json({
+        message:"Course not found",
+        success:false
+      })
+    }
+    const existingModule = existingCourse.modules.find((module)=>module._id.toString()===moduleId.toString())
+    if(!existingModule){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,message:"Module not found"})
+    }
+    const existingVideo = existingModule.videos.find((video)=>video._id.toString()===videoId.toString())
+    if(!existingVideo){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,message:"Video not found"})
+    }
+
+    const result = await authCourse.updateOne(
+      {
+      _id:courseId,
+      instructor:instructorId,
+      status:"draft"
+    },
+    {
+      $pull:{"modules.$[module].videos":{_id:videoId}}
+    },
+    {
+      arrayFilters:[{"module._id":moduleId}],
+      session
+    }
+  )
+
+  if(result.modifiedCount===0){
+    await session.abortTransaction()
+    return res.status(409).json({
+      success:false,
+      message:"Video already deleted"
+    })
+  }
+
+  const updatedVideo = await authCourse.findOne({
+    _id:courseId,
+    instructor:instructorId,
+    status:"draft"
+  }).session(session)
+
+  const module = updatedVideo.modules.find((module)=>module._id.toString()===moduleId.toString())
+  module.videos = module.videos.map((video,index)=>{
+    video.order=index+1
+    video.updatedAt=Date.now()
+    return video
+  })
+
+  const moduleDuration = module.videos.reduce((currDuration,video)=>currDuration+(video.duration || 0),0)
+  module.moduleDuration = moduleDuration
+  module.updatedAt = Date.now()
+  const courseDuration = updatedVideo.modules.reduce((courseDuration,course)=>courseDuration+course.moduleDuration,0)
+  updatedVideo.courseDuration = courseDuration
+  updatedVideo.updatedAt = Date.now()
+  await updatedVideo.save({session})
+  await session.commitTransaction()
+  res.status(200).json({
+    success:true,
+    message:"Video deleted successfully",
+    video:module.videos
+  })
+  try {
+    await cloudinary.uploader.destroy(existingVideo.videoPublicId,{resource_type:"video"})
+  } catch (error) {
+    console.error("Error cloudinary video cleanup: ",error)
+  }
+  } catch (error) {
+    console.error("Error: ",error)
+    if(session.inTransaction()){
+      await session.abortTransaction()
+    }
+    res.status(500).json({success:false,message:"Internal server error"})
+  }
+  finally{
+    session.endSession()
+  }
+}
+
+export const addVideo = async (req,res) => {
+
+  const instructorId = req.user._id
+  const {courseId,moduleId} = req.params
+  let {title} = req.body
+  const videoFile = req.file
+
+  if(!title || typeof title!=="string" || title.trim().length===0){
+    return res.status(400).json({success:false,
+      message:"Title is required"
+    })
+  }
+
+  if(!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(moduleId)){
+    return res.status(400).json({
+      success:false,
+      message:"Invalid courseId or moduleId"
+    })
+  }
+  if(!videoFile){
+    return res.status(400).json({
+      success:false,
+      message:"Video file is required"
+    })
+  }
+
+    let uploadedVideo
+    try {
+      // Video upload to cloudinary
+      uploadedVideo = await cloudinary.uploader.upload(videoFile,{resource_type:"video"})
+
+    } catch (error) {
+      console.error("Cloudinary upload error: ",error);
+      return res.status(409).json({success:false,message:"Unable to upload video"})
+    }
+  
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction()
+    const existingCourse = await authCourse.findOne({
+      _id:courseId,
+      instructor:instructorId,
+      status:"draft"
+    }).session(session)
+    if(!existingCourse){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,
+        message:"Course not found"
+      })
+    }
+
+    const existingModule = existingCourse.modules.find((module)=>module._id.toString()===moduleId.toString())
+    if(!existingModule){
+      await session.abortTransaction()
+      return res.status(400).json({success:false,message:"Module not found"})
+    }
+    let order = existingModule.videos.length+1
+    const videoDetails = {
+      title,
+      videoUrl:uploadedVideo.secure_url,
+      videoPublicId:uploadedVideo.public_id,
+      duration:uploadedVideo.duration,
+      videoSizeInBytes:uploadedVideo.bytes,
+      createdAt:new Date(),
+      updatedAt:new Date(),
+      order
+    }
+    await authCourse.updateOne(
+      {
+        _id:courseId,
+        status:"draft",
+        instructor:instructorId,
+        "modules._id":moduleId
+      },
+      {
+        $push:{"modules.$.videos":videoDetails},
+        $inc:{"modules.$.moduleDuration":(uploadedVideo.duration || 0),
+          courseDuration:( uploadedVideo.duration || 0)
+        }
+      },
+      {session}
+  )
+    await session.commitTransaction()
+    res.status(201).json({success:true,
+      message:"Video uploaded successfully",
+      updatedVideo:videoDetails
+    })
+
+  } catch (error) {
+    console.error("Error: ",error)
+    if(session.inTransaction()){
+      await session.abortTransaction()
+    }
+    res.status(500).json({
+      success:false,
+      message:"Internal server error"
+    })
+  }
+  finally{
+    session.endSession()
+  }
 }
