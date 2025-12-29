@@ -322,10 +322,11 @@ export const reorderModules = async (req, res) => {
   const instructorId = req.user._id;
   const { courseId } = req.params;
   const validCourseId = mongoose.Types.ObjectId.isValid(courseId);
-  if (!validCourseId)
-    return res
+  if (!validCourseId){
+      return res
       .status(400)
       .json({ success: false, message: "Invalid course id" });
+  }
     if(typeof moduleOrder === "string"){
         try {
             moduleOrder = JSON.parse(moduleOrder)
@@ -351,6 +352,12 @@ export const reorderModules = async (req, res) => {
         success: false,
         message: "moduleOrder must be non empty array",
       });
+    }
+    if(moduleOrder.length!==existingCourse.modules.length){
+      return res.status(400).json({
+        success:false,
+        message:"ModuleOrder length must be equal to existing course modules length"
+      })
     }
     if (new Set(moduleOrder).size !== existingCourse.modules.length) {
       return res
@@ -398,18 +405,11 @@ export const reorderVideos = async (req,res) => {
     const instructorId = req.user._id
     let {videoOrder} = req.body
     const {courseId,moduleId} = req.params
-    if(typeof videoOrder==="string"){
-        try {
-            videoOrder = JSON.parse(videoOrder)
-        } catch (error) {
-            return res.status(400).json({success:false,message:"videoModule must be a valid json array",error})
-        }
+    if(!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(moduleId) || !mongoose.Types.ObjectId.isValid(instructorId)){
+      return res.status(400).json({status:false,message:"Invalid id format"})
     }
     if(!Array.isArray(videoOrder) || videoOrder.length===0){
         return res.status(400).json({message:"videoOrder must be an array"})
-    }
-    if(!mongoose.Types.ObjectId.isValid(courseId) || !mongoose.Types.ObjectId.isValid(moduleId) || !mongoose.Types.ObjectId.isValid(instructorId)){
-        return res.status(400).json({status:false,message:"Invalid id format"})
     }
     if(!courseId || !moduleId){
         return res.status(400).json({success:false,message:"courseId and moduleId are required"})
@@ -449,7 +449,10 @@ export const reorderVideos = async (req,res) => {
         }
 
         existingModule.videos = videoOrder.map((module,index)=>{
-            const video = existingModuleMap.get(module._id.toString())
+            const video = existingModuleMap.get(module)
+            if(!video){
+              throw new Error("Invalid video ids in videoOrder")
+            }
             video.order=index+1,
             video.updatedAt=Date.now()
             return video
@@ -461,6 +464,13 @@ export const reorderVideos = async (req,res) => {
             message:"Video reordered successfully"
         })
     } catch (error) {
+      console.error(error)
+      if(error.message==="Invalid video ids in videoOrder"){
+        return res.status(409).json({
+          success:false,
+          message:error.message
+        })
+      }
         res.status(500).json({
             success:false,
             message:"Internal server error"
@@ -468,7 +478,6 @@ export const reorderVideos = async (req,res) => {
     }
 
 }
-
 
 export const deleteModule = async (req,res) => {
   const session = await mongoose.startSession()
@@ -685,7 +694,7 @@ export const addVideo = async (req,res) => {
     let uploadedVideo
     try {
       // Video upload to cloudinary
-      uploadedVideo = await cloudinary.uploader.upload(videoFile,{resource_type:"video"})
+      uploadedVideo = await cloudinary.uploader.upload(videoFile.path,{resource_type:"video"})
 
     } catch (error) {
       console.error("Cloudinary upload error: ",error);
@@ -758,3 +767,24 @@ export const addVideo = async (req,res) => {
     session.endSession()
   }
 }
+
+
+export const checkVideo = async (req, res) => {
+  try {
+    const result = await cloudinary.api.resource(
+      "ich0g9o9qmj5vnw2dsmk",
+      { resource_type: "video" }
+    );
+
+    return res.json({
+      success: true,
+      result,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(404).json({
+      success: false,
+      message: "Video not found in this Cloudinary account",
+    });
+  }
+};
