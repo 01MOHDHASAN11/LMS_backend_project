@@ -5,7 +5,8 @@ import upload from "../middleware/uploadResume.middleware.js";
 import fs from "fs";
 import { verificationRequestModel } from "../model/verificationRequest.model.js";
 import { draftCourseValidation } from "../validation/draftCourse.js";
-import mongoose from "mongoose";
+import mongoose, { Mongoose } from "mongoose";
+import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 
 
 
@@ -606,10 +607,10 @@ export const deleteVideo = async (req,res) => {
       status:"draft"
     },
     {
-      $pull:{"modules.$[module].videos":{_id:videoId}}
+      $pull:{"modules.$[module].videos":{_id:existingVideo._id}}
     },
     {
-      arrayFilters:[{"module._id":moduleId}],
+      arrayFilters:[{"module._id": mongoose.Types.ObjectId.createFromHexString(moduleId)}],
       session
     }
   )
@@ -694,13 +695,13 @@ export const addVideo = async (req,res) => {
     let uploadedVideo
     try {
       // Video upload to cloudinary
-      uploadedVideo = await cloudinary.uploader.upload(videoFile.path,{resource_type:"video"})
+      uploadedVideo = await cloudinary.uploader.upload(videoFile.path,{resource_type:"video",folder:"videos"})
 
     } catch (error) {
       console.error("Cloudinary upload error: ",error);
       return res.status(409).json({success:false,message:"Unable to upload video"})
     }
-  
+  // console.log(uploadedVideo)
   const session = await mongoose.startSession();
   try {
     session.startTransaction()
@@ -769,22 +770,77 @@ export const addVideo = async (req,res) => {
 }
 
 
-export const checkVideo = async (req, res) => {
-  try {
-    const result = await cloudinary.api.resource(
-      "ich0g9o9qmj5vnw2dsmk",
-      { resource_type: "video" }
-    );
 
-    return res.json({
-      success: true,
-      result,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(404).json({
-      success: false,
-      message: "Video not found in this Cloudinary account",
-    });
+export const submitCourseReview = async (req,res) => {
+  const instructorId = req.user._id
+  let {courseId} = req.params
+  if(!mongoose.Types.ObjectId.isValid(courseId)){
+    return res.status(400).json({success:false,message:"Invalid courseId"})
   }
-};
+  const session = await mongoose.startSession()
+  try {
+    session.startTransaction()
+
+    const existingCourse = await authCourse.findOne({
+      _id:courseId,
+      instructor:instructorId,
+    }).session(session)
+
+    if(existingCourse.status!=="draft"){
+      await session.abortTransaction()
+      return res.status(404).json({
+        success:false,
+        message:"Course not found or not in draft state"
+      })
+    }
+
+    if(existingCourse.modules.length===0){
+      await session.abortTransaction()
+      return res.status(400).json({
+        success:false,
+        message:"Course modules can't be empty"
+      })
+    }
+
+    if(existingCourse.modules.some((items)=>items.videos.length===0)){
+      await session.abortTransaction()
+        return res.status(400).json({
+          success:false,
+          message:"Modules must have at least one video"
+        })
+    }
+    const pendingCourseRequest = await courseReviewRequestModel.findOne({course:courseId,instructor:instructorId,status:"pending"}).session(session)
+    if(pendingCourseRequest){
+      await session.commitTransaction()
+      return res.status(200).json({success:false,message:"review request already pending"})
+    }
+    const lastRequest = await courseReviewRequestModel.findOne({course:courseId,instructor:instructorId}).sort({version:-1}).session(session)
+    const nextRequest = lastRequest?lastRequest.version+1:1
+
+
+    await courseReviewRequestModel.create([{
+      instructor:instructorId,
+      course:existingCourse._id,
+      submittedAt:new Date(),
+      version:nextRequest,
+      status:"pending",
+      instructorName:req.user.name,
+      instructorEmail:req.user.email,
+      courseTitle:existingCourse.title
+    }],{session})
+    
+    existingCourse.status="review"
+    existingCourse.submittedForReviewAt = new Date()
+    await existingCourse.save({session})
+
+    await session.commitTransaction()
+    res.status(201).json({success:true,message:"course review request has been submitted"})
+  } catch (error) {
+    console.error("Error: ",error)
+    await session.abortTransaction()
+    res.status(500).json({success:false,message:"Internal server error"})
+  }
+  finally{
+     session.endSession()
+  }
+}

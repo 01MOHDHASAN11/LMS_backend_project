@@ -4,9 +4,11 @@ import { unblockRequestModel } from "../model/unblockRequest.model.js"
 import { sendInstructorVerificationEmail, sendUnblockStatusEmail } from "../utils/adminUnblockStatusUpdateEmail.js"
 import { verificationRequestModel } from "../model/verificationRequest.model.js"
 import updateInstructorVerificationRequestValidation from "../validation/updateInstructorRequest.js"
-export const adminDashBoard = (req,res) => {
-    res.json({message:`Welcome admin ${req.user.name}`})
-}
+import mongoose from "mongoose"
+import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js"
+import authCourse from "../model/course.model.js"
+import { sendCourseReviewEmail } from "../utils/submitCourseReview.utils.js"
+
 
 
 // User requests for unblock
@@ -185,5 +187,83 @@ export const updateInstructorVerificationRequest = async(req,res) => {
         })
     } catch (error) {
         res.status(500).json({message:"Internal server error",error})
+    }
+}
+
+
+export const reviewCourseRequest = async (req,res) => {
+    const adminId = req.user._id
+    const {requestId} = req.params
+    const {feedback, action} = req.body
+    if(!["rejected","approved"].includes(action.trim())){
+        return res.status(400).json({success:false,message:"Invalid action"})
+    }
+    if(!mongoose.Types.ObjectId.isValid(requestId)){
+        return res.status(400).json({success:false,message:"Invalid requestId"})
+    }
+    const session = await mongoose.startSession()
+    try {
+        session.startTransaction()
+        const request = await courseReviewRequestModel.findById({
+            _id:requestId
+        }).session(session)
+
+        if(!request || request.status!=="pending"){
+            await session.abortTransaction()
+            return res.status(404).json({
+                success:false,
+                message:"Invalid or already processed request"
+            })
+        }
+        const existingCourse = await authCourse.findById({_id:request.course}).session(session)
+        if(!existingCourse || existingCourse.status!=="review"){
+            await session.abortTransaction()
+            return res.status(400).json({success:false,message:"Invalid course id or course not in review state"})
+        }
+        if(action==="approved"){
+            request.status="approved"
+            existingCourse.status="published"
+            existingCourse.publishedAt=new Date()
+            existingCourse.reviewResponse.decision="approved"
+        }
+        else{
+            request.status = "rejected"
+            existingCourse.status="draft"
+            existingCourse.reviewResponse.decision="rejected"
+        }
+
+        existingCourse.feedback=feedback
+        existingCourse.reviewer = adminId
+        existingCourse.reviewedAt=new Date()
+        request.feedback = feedback
+        request.reviewer=adminId
+
+        await request.save({session})
+        await existingCourse.save({session})
+        await session.commitTransaction()
+
+        res.status(200).json({success:true,message:"Request review successful"})
+
+
+        setImmediate(() => {
+        sendCourseReviewEmail({
+            toEmail: request.instructorEmail,
+            instructorName: request.instructorName,
+            courseTitle: request.courseTitle,
+            status: action,
+            feedback,
+        }).catch(err => {
+            console.error("Email sending failed:", err);
+        });
+        });
+
+
+    } catch (error) {
+        console.error(error)
+        await session.abortTransaction()
+        return res.status(500).json({success:false,message:"Internal server error"})
+    }
+    finally{
+        session.endSession()
     }
 }

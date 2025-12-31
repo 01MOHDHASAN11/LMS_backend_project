@@ -1,7 +1,7 @@
 import express from "express"
 import { verifyToken } from "../middleware/protectedRoute.middleware.js"
 import { authorize } from "../middleware/authorize.middleware.js"
-import { addCourseModule, addVideo, checkVideo, createCourseDraft, deleteModule, deleteVideo, getAllCourses, instructorVerification, reorderModules, reorderVideos, updateCourse, viewInstructorVerificationRequests} from "../controller/instructorController.js"
+import { addCourseModule, addVideo, createCourseDraft, deleteModule, deleteVideo, getAllCourses, instructorVerification, reorderModules, reorderVideos, submitCourseReview, updateCourse, viewInstructorVerificationRequests} from "../controller/instructorController.js"
 import upload from "../middleware/uploadResume.middleware.js"
 import { isInstructorVerified } from "../middleware/isInstructorVerified.middleware.js"
 import { thumbNailUpload } from "../middleware/uploadThumbNail.middleware.js"
@@ -23,6 +23,7 @@ instructorRoute.put("/course/:courseId/module/:moduleId/reorder-videos",isInstru
 instructorRoute.delete("/delete-module/course/:courseId/module/:moduleId",isInstructorVerified,deleteModule)
 instructorRoute.delete("/delete-video/course/:courseId/module/:moduleId/video/:videoId",isInstructorVerified,deleteVideo)
 instructorRoute.post("/add-video/course/:courseId/module/:moduleId",isInstructorVerified,moduleVideoUpload.single("videoFile"),multerUploadErrorHandler,addVideo)
-instructorRoute.get("/debug/cloudinary-video", checkVideo);
+instructorRoute.post("/course/:courseId/review-request",isInstructorVerified,submitCourseReview)
+
 
 export default instructorRoute

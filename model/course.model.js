@@ -31,8 +31,21 @@ const courseSchema = mongoose.Schema({
     instructor:{type:mongoose.Schema.Types.ObjectId,ref:"userAuth",required:true,index:true},
     modules:[moduleSchema],
     courseDuration:{type:Number},
-    status:{type:String,enum:["draft","review","published","archived"]},
+    status:{type:String,enum:["draft","review","published"]},
     publishedAt:{type:Date},
+    submittedForReviewAt:{type:Date},
+    reviewedAt:{type:Date},
+    reviewResponse:{
+        decision:{
+            type:String,
+            enum:["approved","rejected"]
+        },
+        feedback:String,
+        reviewer:{
+            type:mongoose.Schema.Types.ObjectId,
+            ref:"userAuth"
+        }
+    },
     createdAt:{type:Date,default:Date.now},
     updatedAt:{type:Date,default:null},
 })
@@ -42,7 +55,7 @@ courseSchema.index({category:1})
 courseSchema.index({tags:1})
 courseSchema.index(
     {instructor:1,status:1},
-    {partialFilterExpression:{status:{$in:["draft","review","archived"]}}}
+    {unique:true,partialFilterExpression:{status:"pending"}}
 )
 
 const authCourse = mongoose.model("course",courseSchema)
