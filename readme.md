@@ -6,96 +6,168 @@
 [![Redis](https://img.shields.io/badge/Redis-Live-E14329?style=flat&logo=redis)](https://redis.io)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-blueviolet)]()
 
-A **production-ready secure backend API** built with Node.js + Express, featuring enterprise-grade authentication, role-based access control, advanced user block/unblock workflow, Redis session management, and multiple layers of security.
+A **production-ready secure backend API** built with **Node.js + Express**, featuring enterprise-grade authentication, Redis-backed sessions, and a **full instructor → admin course review & publishing workflow**.
 
-Currently in **active development** – more features coming soon (Course Creation, Enrollment, Reviews, etc.)
-
----
-
-### Key Highlights
-
-- JWT + Redis Refresh Tokens (secure & revocable sessions)
-- Full User Block/Unblock System with admin approval workflow
-- Email Verification & Secure Password Reset
-- Role-Based Access Control (Admin / Student / Instructor)
-- Smart Rate Limiting (per email + per IP)
-- NoSQL Injection & XSS Protection
-- Clean MVC Architecture + Joi Validation
-- Redis-powered session invalidation on logout/block
+Currently in **active development**, built with scalability, security, and clean architecture in mind.
 
 ---
 
-### Core Features (Implemented)
+## Key Highlights
 
-| Feature                              | Status  | Details                                                                 |
-|-------------------------------------|--------|--------------------------------------------------------------------------|
-| Secure Signup / Login / Logout                | Done   | JWT access + Redis refresh token                                                          |
-| Email Verification                     | Done   | Verification link on signup                                                       |
-| Forgot & Reset Password                  | Done   | Rate-limited + expiring reset tokens                                                  |
-| Refresh Token Endpoint                   | Done   | Issues new access token, stored in Redis                                               |
-| User Blocking (Permanent/Temporary)   | Done   | Admin-only, blocks login & token refresh                                                 |
-| Unblock Request System                 | Done   | Users → Admin reviews → Approve/Reject + email notification                          |
-| Rate Limiting (Email + IP)              | Done   | Prevents brute force & bot signups                                                    |
-| Security Hardening                      | Done   | Helmet, mongo-sanitize, xss protection, bcrypt, secure headers                                 |
-| Role-Based Route Protection              | Done   | Admin-only & authenticated routes                                                          |
-
----
-
-### Upcoming Features (Next Commits)
-
-- Instructor → Create / Update / Publish Courses  
-- Student → Enroll & View Enrolled Courses  
-- Course Reviews & Ratings  
-- Payment Integration (Stripe/PayPal)  
-- API Documentation with Swagger  
-- Unit & Integration Tests (Jest + Supertest)
+- JWT Authentication + Redis Refresh Tokens (secure & revocable)
+- Role-Based Access Control (Admin / Instructor / Student)
+- Instructor Course Draft → Review → Publish lifecycle
+- Admin-moderated, versioned course review system
+- Cloudinary-based video upload & management
+- Email notifications for critical workflows
+- Smart rate limiting (per IP + per email)
+- NoSQL Injection & XSS protection
+- Clean MVC architecture with Joi validation
+- Redis-powered session invalidation on logout / block
 
 ---
 
-### Project Structure
+## Core Features (Implemented)
+
+| Feature | Status | Details |
+|------|------|------|
+| Secure Signup / Login / Logout | ✅ Done | JWT access + Redis refresh tokens |
+| Email Verification | ✅ Done | Verification link on signup |
+| Forgot & Reset Password | ✅ Done | Rate-limited + expiring reset tokens |
+| Refresh Token Endpoint | ✅ Done | Issues new access token from Redis |
+| Role-Based Route Protection | ✅ Done | Admin / Instructor / Student |
+| User Blocking (Permanent / Temporary) | ✅ Done | Admin-only, blocks login & refresh |
+| Unblock Request System | ✅ Done | User → Admin review → Approve / Reject |
+| Rate Limiting (IP + Email) | ✅ Done | Prevents brute-force & bot signups |
+| Security Hardening | ✅ Done | Helmet, mongo-sanitize, XSS, bcrypt |
+| Redis Session Invalidation | ✅ Done | Logout / block instantly revokes tokens |
+
+---
+
+## Instructor Course Management (Implemented)
+
+| Feature | Status | Details |
+|------|------|------|
+| Create Course (Draft Mode) | ✅ Done | Minimal required fields |
+| Update Course Metadata | ✅ Done | Title, description, price, tags |
+| Add Modules | ✅ Done | Dynamic module creation |
+| Delete Modules | ✅ Done | Safe removal with reordering |
+| Upload Videos | ✅ Done | Cloudinary-based uploads |
+| Delete Videos | ✅ Done | DB + Cloudinary cleanup |
+| Reorder Modules | ✅ Done | Order persistence |
+| Reorder Videos | ✅ Done | Maintains correct sequence |
+| Auto Duration Calculation | ✅ Done | Derived from video lengths |
+
+---
+
+## Course Review & Publishing Workflow (Implemented)
+
+### Instructor Flow
+1. Instructor creates a course in **draft**
+2. Adds modules and videos incrementally
+3. Submits course for review
+4. Validation rules:
+   - At least **one module**
+   - Each module must contain **at least one video**
+5. Course state transition:
+   - Course status changed from **draft to review**
+7. A **versioned course review request** is created
+
+### Admin Flow
+1. Admin reviews the submitted course
+2. Possible actions:
+- ✅ **Approve** → course becomes `published`
+- ❌ **Reject** → course reverts to `draft`
+3. Review metadata stored:
+- Decision (approved / rejected)
+- Feedback
+- Reviewer (admin)
+- Reviewed timestamp
+4. Instructor receives **email notification**
+
+### Review Guarantees
+- Only **one pending review request per course**
+- Review requests are **versioned**
+- MongoDB **transactions** ensure atomic updates
+- **Idempotent** admin review actions
+- Emails sent **after successful DB commit**
+
+---
+
+## Email Notifications (Implemented)
+
+- Instructor email verification
+- Course review approval / rejection
+- Professional HTML email templates
+- Non-blocking async dispatch
+
+---
+
+## Database Relationship Architecture
+
+### Entity Relationship Diagram (ERD)
+
+```mermaid
+erDiagram
+ USER ||--o{ COURSE : creates
+ USER ||--o{ ENROLLMENT : enrolls
+ USER ||--o{ COURSE_REVIEW : writes
+ USER ||--o{ COURSE_REVIEW_REQUEST : submits
+ USER ||--o{ UNBLOCK_REQUEST : requests
+ USER ||--o{ INSTRUCTOR_VERIFICATION : applies
+
+ COURSE ||--o{ MODULE : contains
+ MODULE ||--o{ VIDEO : contains
+
+ COURSE ||--o{ COURSE_REVIEW : receives
+ COURSE ||--o{ COURSE_REVIEW_REQUEST : reviewed_for
+ COURSE ||--o{ ENROLLMENT : has
+
+ COURSE_REVIEW_REQUEST }o--|| USER : reviewed_by
+
+```
+
+## Folder Structure
 
 ```bash
 thinkbot-backend/
-├── config/   
-├── controllers/
-├── middleware/
-├── models/
-├── routes/
-├── validation/
-├── .env
-├── server.js
-├── package.json
-└── README.md
+├── config/           # MongoDB, Redis, Cloudinary configuration
+├── controllers/      # Route controllers (business logic)
+├── middleware/       # Auth, RBAC, rate limiting, guards
+├── models/           # Mongoose schemas & indexes
+├── routes/           # Express route definitions
+├── services/         # Email, token, external services
+├── validation/       # Joi request validation schemas
+├── utils/            # Shared helper utilities
+├── .env              # Environment variables (ignored in git)
+├── server.js         # Application entry point
+├── package.json      # Dependencies & scripts
+└── README.md         # Project documentation
 
+```
 
-### Environment Variables
+## Environment Variables
 
-Create a `.env` file in the root directory (never commit this file).  
-Use the template below:
-
-```env
-# Server
+### Server
 PORT=5000
 
-# MongoDB Atlas Connection String
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/thinkbot?retryWrites=true&w=majority
+### MongoDB Atlas
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/thinkbot
 
-# Redis (Local or Cloud - Redis Labs, Upstash, etc.)
-REDIS_URL=redis://default:your_redis_password@redis-12345.c1.ap-south-1-1.ec2.cloud.redislabs.com:12345
+### Redis
+REDIS_URL=redis://default:your_redis_password@redis-host:12345
 
-# JWT Secrets (Use strong, random strings - at least 64 characters recommended)
-ACCESS_TOKEN=your_super_strong_access_token_secret_here_change_it_in_production_abc123xyz
-REFRESH_TOKEN=another_even_longer_and_stronger_refresh_token_secret_never_reuse_above
+### JWT Secrets
+ACCESS_TOKEN=your_super_strong_access_token_secret
+REFRESH_TOKEN=your_even_stronger_refresh_token_secret
+JWT_SECRET=fallback_strong_secret
 
-# Fallback JWT secret (used in some middlewares)
-JWT_SECRET=fallback_strong_secret_for_compatibility
-
-# Email Configuration (Nodemailer)
-# Recommended: Use Gmail with App Password or any SMTP service (SendGrid, Mailgun, etc.)
+### Email (SMTP / Nodemailer)
 EMAIL_USER=thinkbot.noreply@gmail.com
-EMAIL_PASSWORD=abcd efgh ijkl mnop        # 16-digit Gmail App Password (with spaces) or SMTP password
+EMAIL_PASSWORD=your_app_password
 
-# Frontend URL - Used in email links and CORS
+### Frontend
 FRONTEND_URL=https://thinkbot-yourapp.vercel.app
-# Or for local development
-# FRONTEND_URL=http://localhost:3000
+
+### FRONTEND_URL
+http://localhost:3000

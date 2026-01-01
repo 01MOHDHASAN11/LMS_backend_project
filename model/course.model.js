@@ -47,16 +47,17 @@ const courseSchema = mongoose.Schema({
         }
     },
     createdAt:{type:Date,default:Date.now},
-    updatedAt:{type:Date,default:null},
+    updatedAt:{type:Date,default:Date.now},
 })
 
-courseSchema.index({title:"text"})
+courseSchema.index({title:"text", description:"text"})
 courseSchema.index({category:1})
 courseSchema.index({tags:1})
 courseSchema.index(
     {instructor:1,status:1},
     {unique:true,partialFilterExpression:{status:"pending"}}
 )
+courseSchema.index({updatedAt:-1})
 
 const authCourse = mongoose.model("course",courseSchema)
 
