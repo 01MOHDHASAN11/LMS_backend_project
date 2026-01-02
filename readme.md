@@ -103,6 +103,97 @@ Currently in **active development**, built with scalability, security, and clean
 
 ---
 
+---
+
+## Student Course Consumption & Progress Tracking (Implemented)
+
+The platform supports **secure course consumption** for enrolled students with
+**signed video streaming** and **robust progress tracking**.
+
+### Enrollment & Access Control
+
+| Feature | Status | Details |
+|------|------|------|
+| Course Enrollment Validation | ✅ Done | Only enrolled students can access content |
+| Published Course Guard | ✅ Done | Draft / review courses blocked |
+| Role-based Access | ✅ Done | Student-only video access routes |
+
+---
+
+### Course Details for Students
+
+| Feature | Status | Details |
+|------|------|------|
+| Get Course Details (Enrolled) | ✅ Done | Full module + video metadata |
+| Get Course Details (Not Enrolled) | ✅ Done | Preview mode (no video URLs) |
+| Instructor Info | ✅ Done | Instructor name via populate |
+| Video URL Protection | ✅ Done | Video URLs never exposed directly |
+
+---
+
+### Secure Video Playback
+
+| Feature | Status | Details |
+|------|------|------|
+| Signed Cloudinary URLs | ✅ Done | Short-lived, secure access |
+| Expiry-based Streaming | ✅ Done | URLs expire automatically |
+| Re-fetch on Expiry | ✅ Done | Frontend requests fresh URL |
+| No Backend Streaming | ✅ Done | CDN handles buffering & seeking |
+
+**Security Guarantees**
+- Video URLs are **never stored in frontend**
+- URLs are **time-limited**
+- Only enrolled users can request playback
+
+---
+
+### Video Progress Tracking
+
+| Feature | Status | Details |
+|------|------|------|
+| Per-video Progress Tracking | ✅ Done | Watched seconds stored |
+| Anti-cheat Protection | ✅ Done | Progress never decreases |
+| Completion Threshold | ✅ Done | 90% watched = completed |
+| Resume Playback | ✅ Done | Continue from last timestamp |
+| Periodic Sync | ✅ Done | Progress saved every few seconds |
+
+---
+
+### Course Progress Calculation
+
+| Feature | Status | Details |
+|------|------|------|
+| Overall Course Progress | ✅ Done | Based on completed videos |
+| Real-time Progress Update | ✅ Done | Recalculated on each save |
+| Course Completion Flag | ✅ Done | `isCompleted = true` at 100% |
+| Multi-module Support | ✅ Done | All modules counted |
+
+---
+
+### Enrollment Data Model Enhancements
+
+| Field | Purpose |
+|----|----|
+| `videoProgress[]` | Tracks per-video progress |
+| `watchedSeconds` | Resume playback |
+| `completed` | Video completion status |
+| `lastWatchedAt` | Analytics & resume |
+| `progress` | Overall course progress |
+| `isCompleted` | Course completion flag |
+
+---
+
+### Data Integrity & Performance
+
+- Prevents backward progress manipulation
+- Uses MongoDB subdocuments for locality
+- Calculates progress against total videos in course
+- Minimal DB writes via incremental updates
+- Stateless video delivery via CDN
+
+---
+
+
 ## Database Relationship Architecture
 
 ### Entity Relationship Diagram (ERD)
