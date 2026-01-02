@@ -1,11 +1,10 @@
 import authCourse from "../model/course.model.js";
 import redisClient from "../config/redis.js";
 import cloudinary from "../config/cloudinary.js";
-import upload from "../middleware/uploadResume.middleware.js";
 import fs from "fs";
 import { verificationRequestModel } from "../model/verificationRequest.model.js";
 import { draftCourseValidation } from "../validation/draftCourse.js";
-import mongoose, { Mongoose } from "mongoose";
+import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 
 

@@ -149,25 +149,23 @@ thinkbot-backend/
 ## Environment Variables
 
 ### Server
-PORT=5000
+- PORT=5000
 
 ### MongoDB Atlas
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/thinkbot
+- MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/thinkbot
 
 ### Redis
-REDIS_URL=redis://default:your_redis_password@redis-host:12345
+- REDIS_URL=redis://default:your_redis_password@redis-host:12345
 
 ### JWT Secrets
-ACCESS_TOKEN=your_super_strong_access_token_secret
-REFRESH_TOKEN=your_even_stronger_refresh_token_secret
-JWT_SECRET=fallback_strong_secret
+- ACCESS_TOKEN=your_super_strong_access_token_secret
+- REFRESH_TOKEN=your_even_stronger_refresh_token_secret
+- JWT_SECRET=fallback_strong_secret
 
 ### Email (SMTP / Nodemailer)
-EMAIL_USER=thinkbot.noreply@gmail.com
-EMAIL_PASSWORD=your_app_password
+- EMAIL_USER=your-email@example.com
+- EMAIL_PASSWORD=your_app_password
 
 ### Frontend
-FRONTEND_URL=https://thinkbot-yourapp.vercel.app
+- FRONTEND_URL=https://thinkbot-yourapp.vercel.app
 
-### FRONTEND_URL
-http://localhost:3000
