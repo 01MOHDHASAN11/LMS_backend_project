@@ -107,8 +107,37 @@ Currently in **active development**, built with scalability, security, and clean
 
 ## Student Course Consumption & Progress Tracking (Implemented)
 
+## Student Reviews & Ratings (Implemented)
+
+The platform supports a **robust, transaction-safe course review and rating system**
+for enrolled students only.
+
+### Review Rules & Guarantees
+
+| Rule | Enforcement |
+|----|----|
+| Only enrolled students can review | Enrollment validation |
+| One review per student per course | Unique `(student, course)` constraint |
+| Rating range | 1 to 5 enforced at API level |
+| Review update allowed | Existing review can be edited |
+| Atomic updates | MongoDB transactions |
+| Race-condition safe | Single transaction per operation |
+
+---
+
+### Rating Calculation Strategy
+
+- Uses **incremental average update** (no aggregation queries)
+- Prevents expensive re-calculation on every request
+- Handles both **new review** and **review update** cases
+
+**New Review**
+
+**Update Review**
+
 The platform supports **secure course consumption** for enrolled students with
 **signed video streaming** and **robust progress tracking**.
+
 
 ### Enrollment & Access Control
 
@@ -117,6 +146,7 @@ The platform supports **secure course consumption** for enrolled students with
 | Course Enrollment Validation | ✅ Done | Only enrolled students can access content |
 | Published Course Guard | ✅ Done | Draft / review courses blocked |
 | Role-based Access | ✅ Done | Student-only video access routes |
+| Course Enrollment | ✅ Done | Students can enroll before consuming or reviewing |
 
 ---
 
@@ -217,6 +247,10 @@ erDiagram
  COURSE_REVIEW_REQUEST }o--|| USER : reviewed_by
 
 ```
+> Enrollment is a prerequisite for:
+> - Course content access
+> - Video playback
+> - Writing or updating course reviews
 
 ## Folder Structure
 
