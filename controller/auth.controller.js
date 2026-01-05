@@ -7,6 +7,7 @@ import { resetPasswordEmail } from "../utils/resetPasswordMail.js";
 import { validatePassword } from "../utils/validatePassword.js";
 import { signinValidation, signupValidation } from "../validation/user.validation.js";
 import redisClient from "../config/redis.js";
+import { emailQueue } from "../queues/email.queue.js";
 dotenv.config()
 
 
@@ -32,7 +33,19 @@ export const signup = async (req, res) => {
       process.env.JWT_SECRET,
       {expiresIn:"10m"}
     )
-    sendVerificationEmail(email,token,name)
+
+    await emailQueue.add("send-verification-email",{
+      toEmail:email,
+      token,
+      userName:name
+    },
+    {
+      attempts:3,
+      backoff:{type:"exponential",delay:5000},
+      removeOnComplete:true
+    }
+   )
+    // sendVerificationEmail(email,token,name)
     .then(()=>console.log("Email send to your mail address"))
     .catch((err)=>console.log(err))
     res.status(201).json({ message: "User registered successfully, Verification mail send" });

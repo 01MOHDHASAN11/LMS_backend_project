@@ -13,6 +13,7 @@ import adminRoute from "./routes/admin.route.js"
 import commonRoutes from "./routes/common.route.js"
 import instructorRoute from "./routes/instructor.route.js"
 import morgan from "morgan"
+import studentRoutes from "./routes/student.route.js"
 dotenv.config();
 const port = process.env.PORT
 connectDB()
@@ -49,6 +50,7 @@ app.use(morgan("dev"))
 app.use("/api/auth",auth)
 app.use("/admin",adminRoute)
 app.use("/instructor",instructorRoute)
+app.use("/student",studentRoutes)
 app.use("/common",commonRoutes)
 
 

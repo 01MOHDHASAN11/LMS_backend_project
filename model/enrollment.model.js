@@ -18,6 +18,6 @@ const courseEnrollmentSchema = mongoose.Schema({
     isCompleted:{type:Boolean,default:false}
 })
 
-courseEnrollmentSchema.index({student:1,course:1},{unique:true})
+courseEnrollmentSchema.index({course:1,student:1},{unique:true})
 
 export const courseEnrollmentModel = mongoose.model("Enrollment",courseEnrollmentSchema)
