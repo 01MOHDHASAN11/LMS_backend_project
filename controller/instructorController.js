@@ -768,8 +768,6 @@ export const addVideo = async (req,res) => {
   }
 }
 
-
-
 export const submitCourseReview = async (req,res) => {
   const instructorId = req.user._id
   let {courseId} = req.params

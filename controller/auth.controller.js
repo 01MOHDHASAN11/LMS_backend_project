@@ -73,7 +73,16 @@ export const signin = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: "15m" }
       );
-      await sendVerificationEmail(user.email, token, user.name);
+      await emailQueue.add("send-verification-email",{
+        toEmail:user.email,
+        token,
+        userName:user.name
+      },{
+        attempts:3,
+        backoff:{type:"exponential",delay:5000},
+        removeOnComplete:true
+
+      });
       return res.status(401).json({ message: "Email not verified. Verification mail sent." });
     }
 
@@ -197,7 +206,17 @@ export const verifyEmail = async (req, res) => {
         );
 
         // Resend verification email
-        await sendVerificationEmail(user.email, newToken, user.name);
+        await emailQueue.add("resend-verification-email",{
+          toEmail:user.email, 
+          newToken, 
+          userName:user.name
+        },
+          {
+            attempts:3,
+            backoff:{type:"exponential",delay:5000},
+            removeOnComplete:true
+          }
+        );
 
         return res.status(200).json({
           message: "Verification link expired. A new link has been sent to your email.",
@@ -229,7 +248,16 @@ export const forgetPassword = async(req,res) => {
       {expiresIn:"10m"}
     )
 
-    await resetPasswordEmail(email,forgetPasswordToken,user.name)
+    await emailQueue.add("forget-password-email",
+      {
+        toEmail:email,
+        token:forgetPasswordToken,
+        userName:user.name
+      },{
+        attempts:3,
+        backoff:{type:"exponential",delay:5000},
+        removeOnComplete:true
+      })
     res.status(200).json({message:"Reset mail send to your email"})
 }catch (error) {
     console.log(error)

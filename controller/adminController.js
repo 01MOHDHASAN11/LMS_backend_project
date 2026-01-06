@@ -8,7 +8,7 @@ import mongoose from "mongoose"
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js"
 import authCourse from "../model/course.model.js"
 import { sendCourseReviewEmail } from "../utils/submitCourseReview.utils.js"
-
+import { emailQueue } from "../queues/email.queue.js"
 
 
 // User requests for unblock
@@ -97,7 +97,18 @@ export const updateUserBlockStatus = async(req,res) => {
             blockedUser.reviewedAt=Date.now()
             await blockedUser.save()
         }
-        sendUnblockStatusEmail(user.email,user.name,status,adminMessage).catch(error=>console.log("Email sending failed",error))
+        await emailQueue.add("admin-response-on-unblock-request",{
+            userEmail:user.email,
+            userName:user.name,
+            status,
+            adminMessage
+        },
+    {
+        attempts:3,
+        backoff:{type:"exponential",delay:5000},
+        removeOnComplete:true
+    })
+        // sendUnblockStatusEmail(user.email,user.name,status,adminMessage).catch(error=>console.log("Email sending failed",error))
         if(status==="approved") return res.status(200).json({message:"User unblocked successfully"})
         if(status==="rejected") return res.status(200).json({message:"User unblock request rejected"})        
     } catch (error) {

@@ -14,7 +14,7 @@ auth.get("/profile",verifyToken,(req,res)=>{
 })
 
 auth.get("/verify/:token",verifyEmail)
-auth.post("/forget-password",authLimiter({keyPrefix:"forgetPwd",maxEmail:5,maxIP:20,windowInSeconds:3600}),forgetPassword)
+auth.get("/forget-password",authLimiter({keyPrefix:"forgetPwd",maxEmail:5,maxIP:20,windowInSeconds:3600}),forgetPassword)
 auth.post("/logout",logout)
 auth.put("/reset-password/:token",resetPassword)
 auth.put("/change-password",verifyToken,changePassword)
