@@ -2,8 +2,6 @@ import userAuth from "../model/user.model.js";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv"
 import jwt from "jsonwebtoken"
-import {sendVerificationEmail} from "../utils/signupEmailVerify.js"
-import { resetPasswordEmail } from "../utils/resetPasswordMail.js";
 import { validatePassword } from "../utils/validatePassword.js";
 import { signinValidation, signupValidation } from "../validation/user.validation.js";
 import redisClient from "../config/redis.js";
@@ -34,7 +32,7 @@ export const signup = async (req, res) => {
       {expiresIn:"10m"}
     )
 
-    await emailQueue.add("send-verification-email",{
+    await emailQueue.add("signup-verification",{
       toEmail:email,
       token,
       userName:name
@@ -46,8 +44,8 @@ export const signup = async (req, res) => {
     }
    )
     // sendVerificationEmail(email,token,name)
-    .then(()=>console.log("Email send to your mail address"))
-    .catch((err)=>console.log(err))
+    // .then(()=>console.log("Email send to your mail address"))
+    // .catch((err)=>console.log(err))
     res.status(201).json({ message: "User registered successfully, Verification mail send" });
   } catch (error) {
     res.status(500).json(error)

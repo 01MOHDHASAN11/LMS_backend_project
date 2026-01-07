@@ -190,8 +190,18 @@ export const updateInstructorVerificationRequest = async(req,res) => {
         const instructorVerifiedBoolean = status==="approved" ? true : false
         const instructor = await userAuth.findByIdAndUpdate(updateRequest.user,{instructorVerified:instructorVerifiedBoolean},{new:true})
         if(!instructor) return res.status(404).json({message:"Instructor not found"})
-        sendInstructorVerificationEmail(updateRequest.user.email,updateRequest.user.name,updateRequest.status,updateRequest.adminMessage)
-        .then(()=>console.log("Email send to the instructor")).catch(err=>console.log(err))
+        await emailQueue.add("instructor-verification-response",{
+            toEmail:updateRequest.user.email,
+            toName:updateRequest.user.name,
+            status:updateRequest.status,
+            adminMessage
+        },{
+            attempts:3,
+            removeOnComplete:true,
+            backoff:{type:"exponential",delay:5000}
+        })
+        // sendInstructorVerificationEmail(updateRequest.user.email,updateRequest.user.name,updateRequest.status,updateRequest.adminMessage)
+        // .then(()=>console.log("Email send to the instructor")).catch(err=>console.log(err))
         res.status(200).json({
             message:"Status updated successfully",
             updateRequest
@@ -253,20 +263,32 @@ export const reviewCourseRequest = async (req,res) => {
         await existingCourse.save({session})
         await session.commitTransaction()
 
+        await emailQueue.add("course-review-response",{
+            toEmail:request.instructorEmail,
+            instructorName:request.instructorName,
+            courseTitle:request.courseTitle,
+            status:action,
+            feedback
+        },{
+            attempts:3,
+            backoff:{type:"exponential",delay:5000},
+            removeOnComplete:true
+        })
+
         res.status(200).json({success:true,message:"Request review successful"})
 
 
-        setImmediate(() => {
-        sendCourseReviewEmail({
-            toEmail: request.instructorEmail,
-            instructorName: request.instructorName,
-            courseTitle: request.courseTitle,
-            status: action,
-            feedback,
-        }).catch(err => {
-            console.error("Email sending failed:", err);
-        });
-        });
+        // setImmediate(() => {
+        // sendCourseReviewEmail({
+        //     toEmail: request.instructorEmail,
+        //     instructorName: request.instructorName,
+        //     courseTitle: request.courseTitle,
+        //     status: action,
+        //     feedback,
+        // }).catch(err => {
+        //     console.error("Email sending failed:", err);
+        // });
+        // });
 
 
     } catch (error) {

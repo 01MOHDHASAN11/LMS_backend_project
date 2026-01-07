@@ -6,6 +6,7 @@ import { verificationRequestModel } from "../model/verificationRequest.model.js"
 import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
+import { uploadQueue } from "../queues/upload.queue.js";
 
 
 
@@ -64,36 +65,31 @@ export const instructorVerification = async (req, res) => {
     if (!resumeFile)
       return res.status(400).json({ message: "Resume is required" });
     const user = req.user._id;
-    if (!user) return res.status(400).json({ message: "User id not found" });
     if (!highestQualification)
       return res
         .status(400)
         .json({ message: "Highest qualification field is required" });
-    const pendingRequest = await verificationRequestModel.findOne({
-      user,
-      status: "pending",
-    });
-    if (pendingRequest)
-      return res
-        .status(400)
-        .json({ message: "Your verification request is in pending state" });
+
     const result = await cloudinary.uploader.upload(req.file.path, {
       resource_type: "auto",
-      folder: "resumes",
-      access_mode: "public",
+      folder: "resumes"
     });
     fs.unlinkSync(req.file.path);
-    const verificationRequest = new verificationRequestModel({
+    
+    await uploadQueue.add("instructor-data",{
       user,
       highestQualification,
       experienceYears,
       portfolioLink,
-      status: "pending",
-      resumeUrl: result.secure_url,
-      resumePublicId: result.public_id,
-    });
-    await verificationRequest.save();
-    res.status(201).json({ message: "Verification request created" });
+      status:"pending",
+      resumeUrl:result.secure_url,
+      resumePublicId:result.public_id
+    },{
+      attempts:3,
+      backoff:{type:"exponential",delay:5000},
+      removeOnComplete:true
+    })
+    res.status(202).json({ message: "Verification request created" });
   } catch (error) {
     if (resumeFile?.public_id) {
       await cloudinary.uploader.destroy(resumeFile.public_id);
