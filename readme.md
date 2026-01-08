@@ -102,7 +102,77 @@ Currently in **active development**, built with scalability, security, and clean
 - Non-blocking async dispatch
 
 ---
+## Background Jobs & Queue Processing (BullMQ + Redis)
 
+To ensure **fast API responses** and **non-blocking workflows**, the backend uses **BullMQ with Redis** for background job processing.
+
+### Why BullMQ?
+- Prevents slow API responses caused by email sending
+- Improves scalability under high traffic
+- Ensures retries & fault tolerance
+- Decouples critical business logic from IO-heavy tasks
+
+---
+
+### Email Background Processing
+
+All email-related tasks are processed **asynchronously** using a **single BullMQ queue** (`email-queue`) and **one worker** with a switch-case strategy.
+
+#### Supported Background Email Jobs
+- Signup email verification
+- Forgot password email
+- Admin unblock response email
+- Course review approval / rejection email
+- Instructor verification status email
+
+#### Design Decisions
+- **Single queue + single worker**
+  - Avoids race conditions and duplicate processing
+  - Prevents runtime issues caused by multiple workers on the same queue
+- **Switch-case job handling**
+  - Each email type is identified by `job.name`
+- **Retries & backoff**
+  - Failed jobs retry automatically with exponential backoff
+- **Clean Redis memory**
+  - Successful jobs are removed from Redis
+  - Failed jobs can be routed to a Dead Letter Queue (DLQ)
+
+---
+
+### Resume Upload & Instructor Verification Workflow
+
+To balance **performance and data integrity**, the instructor verification flow is split into two parts:
+
+1. **Synchronous**
+   - Resume file upload to Cloudinary
+   - Immediate validation of request
+2. **Asynchronous (BullMQ)**
+   - Database creation of instructor verification request
+   - Prevents blocking API response due to DB writes
+
+This ensures:
+- Faster API response time
+- No loss of uploaded files
+- Reliable background persistence
+
+---
+
+### Queue Architecture Overview
+
+| Queue Name | Purpose |
+|-----------|--------|
+| `email-queue` | All background email notifications |
+| `upload-queue` | Background DB updates for instructor verification |
+
+---
+
+### Worker Execution
+
+Workers run independently from the API server:
+
+```bash
+npm run worker
+```
 ---
 
 ## Student Course Consumption & Progress Tracking (Implemented)
