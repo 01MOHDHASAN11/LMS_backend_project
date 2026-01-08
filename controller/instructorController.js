@@ -7,6 +7,7 @@ import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 import { uploadQueue } from "../queues/upload.queue.js";
+import * as crypto from 'crypto';
 
 
 
@@ -57,33 +58,68 @@ export const updateCourse = async (req, res) => {
   }
 };
 
+export const getCloudinarySignature = async (req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+
+  const params = {
+    folder: "resumes",
+    resource_type: "raw",
+    allowed_formats: "pdf",
+    max_file_size: 5 * 1024 * 1024,
+    timestamp,
+  };
+
+  const signature = crypto
+    .createHash("sha1")
+    .update(
+      Object.keys(params)
+        .sort()
+        .map((key) => `${key}=${params[key]}`)
+        .join("&") + process.env.CLOUDINARY_SECRET_KEY
+    )
+    .digest("hex");
+
+  res.status(200).json({
+    timestamp,
+    signature,
+    cloudName: process.env.CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    folder: "resumes",
+    resource_type: "raw",
+    allowed_formats: "pdf",
+    max_file_size: 5 * 1024 * 1024,
+  });
+};
+
 export const instructorVerification = async (req, res) => {
-  let resumeFile;
   try {
-    const { highestQualification, experienceYears, portfolioLink } = req.body;
-    resumeFile = req.file;
-    if (!resumeFile)
-      return res.status(400).json({ message: "Resume is required" });
+    const { highestQualification, experienceYears, portfolioLink, resumeUrl, resumePublicId } = req.body;
+    if(!resumeUrl || !resumePublicId){
+      return res.status(400).json({message:"Resume upload required"})
+    }
     const user = req.user._id;
     if (!highestQualification)
       return res
         .status(400)
         .json({ message: "Highest qualification field is required" });
 
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: "auto",
-      folder: "resumes"
-    });
-    fs.unlinkSync(req.file.path);
-    
+    // const result = await cloudinary.uploader.upload(req.file.path, {
+    //   resource_type: "auto",
+    //   folder: "resumes"
+    // });
+    // fs.unlinkSync(req.file.path);
+    const existing = await verificationRequestModel.findOne({user,status:"pending"})
+    if(existing){
+      return res.status(400).json({success:false,message:"Your verification request is already pending"})
+    }
     await uploadQueue.add("instructor-data",{
       user,
       highestQualification,
       experienceYears,
       portfolioLink,
       status:"pending",
-      resumeUrl:result.secure_url,
-      resumePublicId:result.public_id
+      resumeUrl,
+      resumePublicId
     },{
       attempts:3,
       backoff:{type:"exponential",delay:5000},
@@ -91,9 +127,6 @@ export const instructorVerification = async (req, res) => {
     })
     res.status(202).json({ message: "Verification request created" });
   } catch (error) {
-    if (resumeFile?.public_id) {
-      await cloudinary.uploader.destroy(resumeFile.public_id);
-    }
     res.status(500).json({ message: "Internal server error", error });
   }
 };
