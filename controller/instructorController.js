@@ -6,8 +6,8 @@ import { verificationRequestModel } from "../model/verificationRequest.model.js"
 import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
-import { uploadQueue } from "../queues/upload.queue.js";
 import * as crypto from 'crypto';
+
 
 
 
@@ -58,15 +58,12 @@ export const updateCourse = async (req, res) => {
   }
 };
 
-export const getCloudinarySignature = async (req, res) => {
+export const getResumeSignature = async (req, res) => {
   const timestamp = Math.round(Date.now() / 1000);
-
+  const instructorId = req.user._id
   const params = {
-    folder: "resumes",
-    resource_type: "raw",
-    allowed_formats: "pdf",
-    max_file_size: 5 * 1024 * 1024,
-    timestamp,
+    folder: `resumes/${instructorId}`,
+    timestamp
   };
 
   const signature = crypto
@@ -84,16 +81,14 @@ export const getCloudinarySignature = async (req, res) => {
     signature,
     cloudName: process.env.CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
-    folder: "resumes",
-    resource_type: "raw",
-    allowed_formats: "pdf",
-    max_file_size: 5 * 1024 * 1024,
+    folder:`resumes/${instructorId}`,
+    resource_type:"raw"
   });
 };
 
 export const instructorVerification = async (req, res) => {
   try {
-    const { highestQualification, experienceYears, portfolioLink, resumeUrl, resumePublicId } = req.body;
+    const { highestQualification, experienceYears, portfolioLink, resumeUrl, resumePublicId,bytes,resource_type } = req.body;
     if(!resumeUrl || !resumePublicId){
       return res.status(400).json({message:"Resume upload required"})
     }
@@ -103,30 +98,42 @@ export const instructorVerification = async (req, res) => {
         .status(400)
         .json({ message: "Highest qualification field is required" });
 
-    // const result = await cloudinary.uploader.upload(req.file.path, {
-    //   resource_type: "auto",
-    //   folder: "resumes"
-    // });
-    // fs.unlinkSync(req.file.path);
-    const existing = await verificationRequestModel.findOne({user,status:"pending"})
-    if(existing){
-      return res.status(400).json({success:false,message:"Your verification request is already pending"})
+    if(resource_type!=="raw"){
+      return res.status(400).json({success:false,message:"Invalid resource type"})
     }
-    await uploadQueue.add("instructor-data",{
+    if(!resumePublicId || !resumeUrl){
+      return res.status(400).json({success:false,message:"Resume url and public id is required"})
+    }
+    if(resumeUrl.split(".").pop().toLowerCase()!=="pdf"){
+      return res.status(400).json({success:false,message:"Only pdf file is allowed"})
+    }
+    if(parseInt(bytes)>5*1024*1024){
+      return res.status(400).json({success:false,message:"File is too large"})
+    }
+    if(!resumePublicId.startsWith(`resumes/${user}`)){
+      return res.status(403).json({success:false,message:"Unauthorized user"})
+    }
+
+    const request = await verificationRequestModel.findOne({user})
+    if(request?.status==="approved"){
+      return res.status(200).json({success:true,message:"Already verified instructor"})
+    }
+    if(request?.status==="pending"){
+      return res.status(400).json({success:false,message:"Request is already in pending request"})
+    }
+
+    
+    await verificationRequestModel.create({
       user,
       highestQualification,
-      experienceYears,
       portfolioLink,
-      status:"pending",
+      experienceYears,
+      resumePublicId,
       resumeUrl,
-      resumePublicId
-    },{
-      attempts:3,
-      backoff:{type:"exponential",delay:5000},
-      removeOnComplete:true
     })
     res.status(202).json({ message: "Verification request created" });
   } catch (error) {
+    console.error(error)
     res.status(500).json({ message: "Internal server error", error });
   }
 };
@@ -161,40 +168,73 @@ export const viewInstructorVerificationRequests = async (req, res) => {
   }
 };
 
+
 const MAX_DRAFT_COURSES = 20;
+export const getThumbnailSignature = async(req,res) => {
+  try {
+      const timestamp = Math.round(Date.now()/1000)
+      const instructorId = req.user._id
+  const params = {
+    folder:`thumbnail/${instructorId}`,
+    timestamp
+  }
+
+  const signature = crypto.createHash("sha1").update(
+    Object.keys(params).sort().map((key)=>`${key}=${params[key]}`)
+    .join("&")+process.env.CLOUDINARY_SECRET_KEY
+    ).digest("hex")
+  
+  res.status(200).json({
+    signature,
+    folder:params.folder,
+    timestamp,
+    apiKey:process.env.CLOUDINARY_API_KEY,
+    cloudName:process.env.CLOUD_NAME
+  })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({success:false,message:"Internal server error"})
+  }
+}
+
+
 export const createCourseDraft = async (req, res) => {
   const session = await mongoose.startSession();
-  let uploadResult = null;
+  
   try {
-    let parsedTags;
-    try {
-      parsedTags = JSON.parse(req.body.tags);
-    } catch (error) {
-      return res.status(400).json({ message: "Invalid tags format" });
-    }
     const instructorId = req.user._id;
-    const { price, description, title, category } = req.body;
-    const thumbnailUrl = req.file;
-    if (!thumbnailUrl) {
-      return res.status(400).json({ message: "Thumbnail is required" });
+    const { price, description, title, category, tags, thumbnailUrl, thumbnailUrlPublicId,format,bytes,resourceType } = req.body;
+
+    let parsedTags = tags
+    if(typeof parsedTags==="string"){
+      parsedTags=JSON.parse(tags)
     }
-    const { error } = draftCourseValidation.validate({
-      ...req.body,
-      tags: parsedTags,
-    });
+
+    const { error } = draftCourseValidation.validate({price,description,title,category,tags:parsedTags,thumbnailUrl,thumbnailUrlPublicId});
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
-    uploadResult = await cloudinary.uploader.upload(req.file.path, {
-      folder: "thumbnail",
-      resource_type: "auto",
-      access_mode: "public",
-    });
+    if(!thumbnailUrlPublicId.startsWith(`thumbnail/${instructorId}`)){
+      await cloudinary.uploader.destroy(thumbnailUrlPublicId)
+      return res.status(403).json({success:false,message:"Unauthorized thumbnail upload"})
+    }
+    if(!["jpg","jpeg","png","webp","avif"].includes(format)){
+      await cloudinary.uploader.destroy(thumbnailUrlPublicId)
+      return res.status(400).json({success:false,message:"Only jpg jpeg png webp avif formats are allowed"})
+    }
+    if(bytes>5*1024*1024){
+      await cloudinary.uploader.destroy(thumbnailUrlPublicId)
+      return res.status(400).json({success:false,message:"Max 5 MB thumbnail size is allowed"})
+    }
+    if(resourceType!="image"){
+      await cloudinary.uploader.destroy(thumbnailUrlPublicId)
+      return res.status(400).json({success:false,message:"Only image is allowed"})
+    }
     await session.withTransaction(async () => {
       const limitDraft = await authCourse
         .findOne({
           instructor: instructorId,
-          status: { $in: ["draft", "review", "archived"] },
+          status: { $in: ["draft", "review"] },
         })
         .skip(MAX_DRAFT_COURSES)
         .select({ _id: 1 })
@@ -204,13 +244,13 @@ export const createCourseDraft = async (req, res) => {
         throw new Error("DRAFT_LIMIT_EXCEEDED");
       }
 
-      await authCourse.create(
+    await authCourse.create(
         [
           {
             instructor: instructorId,
-            thumbnailUrl: uploadResult.secure_url,
-            tags: parsedTags,
-            thumbnailUrlPublicId: uploadResult.public_id,
+            thumbnailUrl,
+            tags:parsedTags,
+            thumbnailUrlPublicId,
             price,
             description,
             title,
@@ -230,18 +270,12 @@ export const createCourseDraft = async (req, res) => {
     if (error.message === "DRAFT_LIMIT_EXCEEDED") {
       res.status(409).json({
         message:
-          "Too many draft or review courses. Please publish existing courses first.",
+          "Too many draft or review courses.",
       });
-    }
-    if (uploadResult?.public_id) {
-      await cloudinary.uploader.destroy(uploadResult.public_id);
     }
     res.status(500).json({ message: "Internal server error", error });
   } finally {
-    if (req.file?.path) {
-      fs.unlink(req.file.path, () => {});
-    }
-    session.endSession();
+    await session.endSession();
   }
 };
 

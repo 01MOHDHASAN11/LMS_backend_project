@@ -25,5 +25,7 @@ export const draftCourseValidation = Joi.object({
     }).required(),
     price:Joi.number().required().default(0),
     category:Joi.string().required(),
-    tags:Joi.array().items(Joi.string()).required()
+    tags:Joi.array().items(Joi.string()).required(),
+    thumbnailUrl:Joi.string().required(),
+    thumbnailUrlPublicId:Joi.string().required()
 })
