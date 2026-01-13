@@ -18,7 +18,8 @@ Currently in **active development**, built with scalability, security, and clean
 - Role-Based Access Control (Admin / Instructor / Student)
 - Instructor Course Draft → Review → Publish lifecycle
 - Admin-moderated, versioned course review system
-- Cloudinary-based video upload & management
+- Cloudinary-based media upload (videos, thumbnails, resumes) with signed frontend uploads
+
 - Email notifications for critical workflows
 - Smart rate limiting (per IP + per email)
 - NoSQL Injection & XSS protection
@@ -139,30 +140,13 @@ All email-related tasks are processed **asynchronously** using a **single BullMQ
 
 ---
 
-### Resume Upload & Instructor Verification Workflow
-
-To balance **performance and data integrity**, the instructor verification flow is split into two parts:
-
-1. **Synchronous**
-   - Resume file upload to Cloudinary
-   - Immediate validation of request
-2. **Asynchronous (BullMQ)**
-   - Database creation of instructor verification request
-   - Prevents blocking API response due to DB writes
-
-This ensures:
-- Faster API response time
-- No loss of uploaded files
-- Reliable background persistence
-
----
 
 ### Queue Architecture Overview
 
 | Queue Name | Purpose |
 |-----------|--------|
 | `email-queue` | All background email notifications |
-| `upload-queue` | Background DB updates for instructor verification |
+
 
 ---
 
@@ -174,7 +158,57 @@ Workers run independently from the API server:
 npm run worker
 ```
 ---
+## Frontend-Direct File Upload Architecture (Cloudinary Signed Uploads)
 
+To improve **security, scalability, and API performance**, all media uploads are handled
+**directly from the frontend to Cloudinary** using **signed uploads**.
+
+### Why This Approach?
+- Prevents large file uploads from blocking the API
+- Reduces backend memory & CPU usage
+- Ensures secure, permission-scoped uploads
+- Avoids exposing Cloudinary secret keys
+
+---
+
+### Upload Flow (Resume & Course Thumbnail)
+
+1. **Frontend requests a signed upload signature**
+   - Backend validates user role (Instructor-only)
+   - Backend generates a short-lived Cloudinary signature
+   - Signature is scoped to a user-specific folder
+
+2. **Frontend uploads file directly to Cloudinary**
+   - Uses returned signature, timestamp, and API key
+   - No backend file streaming involved
+
+3. **Frontend sends Cloudinary response to backend**
+   - `secure_url`
+   - `public_id`
+   - `bytes`
+   - `resource_type`
+
+4. **Backend validates upload metadata**
+   - File type validation (image / pdf)
+   - Size limits enforced
+   - Folder ownership verification
+   - Resource type validation
+
+5. **Backend persists validated data to database**
+
+---
+
+### Security Guarantees
+
+- Upload signatures are:
+  - Short-lived
+  - Role-protected
+  - Folder-scoped per user
+- Backend **never trusts frontend input blindly**
+- Ownership is verified using `public_id` prefix checks
+- Unauthorized uploads are automatically deleted from Cloudinary
+
+---
 ## Student Course Consumption & Progress Tracking (Implemented)
 
 ## Student Reviews & Ratings (Implemented)
@@ -330,8 +364,9 @@ thinkbot-backend/
 ├── controllers/      # Route controllers (business logic)
 ├── middleware/       # Auth, RBAC, rate limiting, guards
 ├── models/           # Mongoose schemas & indexes
+├── queues/           # Queue and workers
 ├── routes/           # Express route definitions
-├── services/         # Email, token, external services
+├── services/         # Track student course progress
 ├── validation/       # Joi request validation schemas
 ├── utils/            # Shared helper utilities
 ├── .env              # Environment variables (ignored in git)

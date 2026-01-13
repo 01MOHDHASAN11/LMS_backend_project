@@ -1,12 +1,12 @@
 import authCourse from "../model/course.model.js";
 import redisClient from "../config/redis.js";
 import cloudinary from "../config/cloudinary.js";
-import fs from "fs";
 import { verificationRequestModel } from "../model/verificationRequest.model.js";
 import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 import * as crypto from 'crypto';
+import { title } from "process";
 
 
 
@@ -56,34 +56,6 @@ export const updateCourse = async (req, res) => {
   } catch (error) {
     res.status(500).json(error);
   }
-};
-
-export const getResumeSignature = async (req, res) => {
-  const timestamp = Math.round(Date.now() / 1000);
-  const instructorId = req.user._id
-  const params = {
-    folder: `resumes/${instructorId}`,
-    timestamp
-  };
-
-  const signature = crypto
-    .createHash("sha1")
-    .update(
-      Object.keys(params)
-        .sort()
-        .map((key) => `${key}=${params[key]}`)
-        .join("&") + process.env.CLOUDINARY_SECRET_KEY
-    )
-    .digest("hex");
-
-  res.status(200).json({
-    timestamp,
-    signature,
-    cloudName: process.env.CLOUD_NAME,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    folder:`resumes/${instructorId}`,
-    resource_type:"raw"
-  });
 };
 
 export const instructorVerification = async (req, res) => {
@@ -170,40 +142,62 @@ export const viewInstructorVerificationRequests = async (req, res) => {
 
 
 const MAX_DRAFT_COURSES = 20;
-export const getThumbnailSignature = async(req,res) => {
-  try {
-      const timestamp = Math.round(Date.now()/1000)
-      const instructorId = req.user._id
+
+
+const SIGNATURE_CONFIG = {
+  video:{
+    folder:(userId)=>`videos/${userId}`,
+    resource_type:"video"
+  },
+
+  thumbnail:{
+    folder:(userId)=>`thumbnail/${userId}`,
+    resource_type:"image"
+  },
+
+  resume:{
+    folder:(userId) => `resumes/${userId}`,
+    resource_type:"raw"
+  }
+
+}
+
+export const getSignature = async(req,res) => {
+  const {type} = req.query
+    const instructorId = req.user._id
+  const timestamp = Math.round(Date.now()/1000)
+  if(!SIGNATURE_CONFIG[type]){
+    return res.status(400).json({success:false, message:"Invalid upload type"})
+  }
   const params = {
-    folder:`thumbnail/${instructorId}`,
+    folder:SIGNATURE_CONFIG[type].folder(instructorId),
     timestamp
   }
 
+  try {
   const signature = crypto.createHash("sha1").update(
-    Object.keys(params).sort().map((key)=>`${key}=${params[key]}`)
-    .join("&")+process.env.CLOUDINARY_SECRET_KEY
-    ).digest("hex")
-  
-  res.status(200).json({
+    Object.keys(params).sort().map((key)=>`${key}=${params[key]}`).join("&")+process.env.CLOUDINARY_SECRET_KEY
+  )
+  .digest("hex")
+  res.json({
     signature,
-    folder:params.folder,
     timestamp,
+    folder:params.folder,
+    resourceType:SIGNATURE_CONFIG[type].resource_type,
     apiKey:process.env.CLOUDINARY_API_KEY,
     cloudName:process.env.CLOUD_NAME
   })
   } catch (error) {
-    console.error(error)
     res.status(500).json({success:false,message:"Internal server error"})
   }
 }
-
 
 export const createCourseDraft = async (req, res) => {
   const session = await mongoose.startSession();
   
   try {
     const instructorId = req.user._id;
-    const { price, description, title, category, tags, thumbnailUrl, thumbnailUrlPublicId,format,bytes,resourceType } = req.body;
+    const { price, description, title, category, tags, thumbnailUrl, thumbnailUrlPublicId,bytes,resourceType } = req.body;
 
     let parsedTags = tags
     if(typeof parsedTags==="string"){
@@ -218,7 +212,8 @@ export const createCourseDraft = async (req, res) => {
       await cloudinary.uploader.destroy(thumbnailUrlPublicId)
       return res.status(403).json({success:false,message:"Unauthorized thumbnail upload"})
     }
-    if(!["jpg","jpeg","png","webp","avif"].includes(format)){
+    const thumbnailExtension = thumbnailUrl.split(".").pop().toLowerCase()
+    if(!["jpg","jpeg","png","webp","avif"].includes(thumbnailExtension)){
       await cloudinary.uploader.destroy(thumbnailUrlPublicId)
       return res.status(400).json({success:false,message:"Only jpg jpeg png webp avif formats are allowed"})
     }
@@ -282,102 +277,43 @@ export const createCourseDraft = async (req, res) => {
 export const addCourseModule = async (req, res) => {
   const instructor = req.user._id;
   const { draftCourseId } = req.params;
-  const { title, videoTitles } = req.body;
-  const files = req.files;
-  let uploadedVideos;
-
+  const {moduleTitle} = req.body
+  if(!moduleTitle || moduleTitle.trim().length===0){
+    return res.status(400).json({success:false,message:"module title is required"})
+  }
   if (!mongoose.Types.ObjectId.isValid(draftCourseId)) {
     return res.status(400).json({ message: "Invalid course id" });
   }
-  if (!title || typeof title !== "string" || title.trim().length === 0) {
-    return res
-      .status(400)
-      .json({ message: "Title is required and its type must be string" });
-  }
-  if (!videoTitles) {
-    return res.status(400).json({ message: "videoTitles are required" });
-  }
-  const parsedVideoTitles = JSON.parse(videoTitles);
-  const normalizedVideoTitles = Array.isArray(parsedVideoTitles)
-    ? parsedVideoTitles
-    : [parsedVideoTitles];
-  if (normalizedVideoTitles.length !== files.length) {
-    return res.status(400).json({
-      message: "Number of video titles must match number of uploaded videos",
-    });
-  }
-
-  const course = await authCourse.findOne({
-    instructor,
-    status: "draft",
-    _id: draftCourseId,
-  });
-  if (!files || files.length === 0) {
-    return res.status(400).json({ message: "At least one video is required" });
-  }
-  const moduleTitle = title.trim();
-  if (!moduleTitle) {
-    return res.status(400).json({ message: "Module title is required" });
-  }
-  if (!course) {
-    return res.status(404).json({ message: "Draft course not found" });
-  }
-  const moduleOrder = course.modules.length + 1;
-
+  
   try {
-    uploadedVideos = await Promise.all(
-      files.map((file, index) =>
-        cloudinary.uploader
-          .upload(file.path, {
-            folder: "videos",
-            resource_type: "video",
-          })
-          .then((result) => ({
-            title: normalizedVideoTitles[index].trim(),
-            videoUrl: result.secure_url,
-            videoPublicId: result.public_id,
-            videoSizeInBytes: result.bytes,
-            order: index + 1,
-            duration: result.duration,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }))
-      )
-    );
-    const newModule = {
-      title: moduleTitle,
-      videos: uploadedVideos,
-      moduleDuration: uploadedVideos.reduce(
-        (seconds, video) => seconds + (video.duration || 0),
-        0
-      ),
-      order: moduleOrder,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    course.modules.push(newModule);
-    course.courseDuration = course.modules.reduce(
-      (total, module) => total + (module.moduleDuration || 0),
-      0
-    );
-    await course.save();
-    res.status(201).json({ message: "Module created successfully" });
-  } catch (error) {
-    if (uploadedVideos?.length) {
-      await Promise.all(
-        uploadedVideos.map((videos) => {
-          return cloudinary.uploader.destroy(videos.videoPublicId, {
-            resource_type: "video",
-          });
-        })
-      );
+
+const result = await authCourse.updateOne(
+  {
+    _id:draftCourseId,
+    status:"draft",
+    instructor
+  },
+  {
+    $push:{
+      modules:{
+        title:moduleTitle.trim(),
+        videos:[],
+        moduleDuration:0,
+        order:Date.now(),
+        createdAt:new Date(),
+        updatedAt:new Date()
+      }
     }
-    res.status(500).json({ message: "Internal server error", error });
-  } finally {
-    files.forEach((file) => {
-      fs.unlink(file.path, () => {});
-    });
   }
+)
+    if(result.matchedCount===0){
+      return res.status(404).json({success:false,message:"Draft course not found or unauthorized"})
+    }
+    res.status(201).json({success:true,message:"New module created successfully"})
+
+  } catch (error) {
+    res.status(500).json({success:false, message: "Internal server error", error });
+  } 
 };
 
 export const reorderModules = async (req, res) => {
@@ -732,8 +668,7 @@ export const addVideo = async (req,res) => {
 
   const instructorId = req.user._id
   const {courseId,moduleId} = req.params
-  let {title} = req.body
-  const videoFile = req.file
+  let {title,videoSecureUrl,videoPublicId,videoDuration,videoSizeInBytes,format,resourceType} = req.body
 
   if(!title || typeof title!=="string" || title.trim().length===0){
     return res.status(400).json({success:false,
@@ -747,88 +682,62 @@ export const addVideo = async (req,res) => {
       message:"Invalid courseId or moduleId"
     })
   }
-  if(!videoFile){
-    return res.status(400).json({
-      success:false,
-      message:"Video file is required"
+  if(resourceType!=="video" || !["mp4", "webm", "mov", "avi", "mkv", "ogv"].includes(format)){
+    await cloudinary.uploader.destroy(videoPublicId,{
+      resource_type:resourceType
     })
   }
-
-    let uploadedVideo
-    try {
-      // Video upload to cloudinary
-      uploadedVideo = await cloudinary.uploader.upload(videoFile.path,{resource_type:"video",folder:"videos"})
-
-    } catch (error) {
-      console.error("Cloudinary upload error: ",error);
-      return res.status(409).json({success:false,message:"Unable to upload video"})
-    }
-  // console.log(uploadedVideo)
-  const session = await mongoose.startSession();
+  const newVideo = {
+    title:title.trim(),
+    videoUrl:videoSecureUrl,
+    videoPublicId,
+    duration:videoDuration,
+    videoSizeInBytes,
+    order:Date.now(),
+    createdAt:new Date(),
+    updatedAt:new Date()
+  }
   try {
-    session.startTransaction()
-    const existingCourse = await authCourse.findOne({
-      _id:courseId,
-      instructor:instructorId,
-      status:"draft"
-    }).session(session)
-    if(!existingCourse){
-      await session.abortTransaction()
-      return res.status(400).json({success:false,
-        message:"Course not found"
-      })
+ const result = await authCourse.findOneAndUpdate(
+  {
+    _id: courseId,
+    status: "draft",
+    instructor: instructorId
+  },
+  {
+    $push: {
+      "modules.$[mod].videos": newVideo
+    },
+    $inc: {
+      "modules.$[mod].moduleDuration": videoDuration
+    },
+    $set: {
+      "modules.$[mod].updatedAt": new Date()
     }
+  },
+  {
+    arrayFilters: [
+      { "mod._id": moduleId }
+    ],
+    new: true
+  }
+);
 
-    const existingModule = existingCourse.modules.find((module)=>module._id.toString()===moduleId.toString())
-    if(!existingModule){
-      await session.abortTransaction()
-      return res.status(400).json({success:false,message:"Module not found"})
+    if(!result){
+      return res.status(404).json({success:false,message:"Course or module not found"})
     }
-    let order = existingModule.videos.length+1
-    const videoDetails = {
-      title,
-      videoUrl:uploadedVideo.secure_url,
-      videoPublicId:uploadedVideo.public_id,
-      duration:uploadedVideo.duration,
-      videoSizeInBytes:uploadedVideo.bytes,
-      createdAt:new Date(),
-      updatedAt:new Date(),
-      order
-    }
-    await authCourse.updateOne(
-      {
-        _id:courseId,
-        status:"draft",
-        instructor:instructorId,
-        "modules._id":moduleId
-      },
-      {
-        $push:{"modules.$.videos":videoDetails},
-        $inc:{"modules.$.moduleDuration":(uploadedVideo.duration || 0),
-          courseDuration:( uploadedVideo.duration || 0)
-        }
-      },
-      {session}
-  )
-    await session.commitTransaction()
     res.status(201).json({success:true,
-      message:"Video uploaded successfully",
-      updatedVideo:videoDetails
+      message:"Video uploaded successfully"
     })
 
   } catch (error) {
     console.error("Error: ",error)
-    if(session.inTransaction()){
-      await session.abortTransaction()
-    }
     res.status(500).json({
       success:false,
       message:"Internal server error"
     })
   }
-  finally{
-    session.endSession()
-  }
+  
 }
 
 export const submitCourseReview = async (req,res) => {
