@@ -200,8 +200,7 @@ export const updateInstructorVerificationRequest = async(req,res) => {
             removeOnComplete:true,
             backoff:{type:"exponential",delay:5000}
         })
-        // sendInstructorVerificationEmail(updateRequest.user.email,updateRequest.user.name,updateRequest.status,updateRequest.adminMessage)
-        // .then(()=>console.log("Email send to the instructor")).catch(err=>console.log(err))
+        
         res.status(200).json({
             message:"Status updated successfully",
             updateRequest
@@ -276,19 +275,6 @@ export const reviewCourseRequest = async (req,res) => {
         })
 
         res.status(200).json({success:true,message:"Request review successful"})
-
-
-        // setImmediate(() => {
-        // sendCourseReviewEmail({
-        //     toEmail: request.instructorEmail,
-        //     instructorName: request.instructorName,
-        //     courseTitle: request.courseTitle,
-        //     status: action,
-        //     feedback,
-        // }).catch(err => {
-        //     console.error("Email sending failed:", err);
-        // });
-        // });
 
 
     } catch (error) {

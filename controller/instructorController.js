@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 import * as crypto from 'crypto';
 import { title } from "process";
+import { tryCatch } from "bullmq";
 
 
 
@@ -740,6 +741,37 @@ export const addVideo = async (req,res) => {
   
 }
 
+export const deleteDraftedCourse = async(req,res) => {
+  const instructorId = req.user._id
+  const {courseId} = req.params
+try{
+  const course = await authCourse.findOneAndDelete({_id:courseId,status:"draft",instructor:instructorId})
+  if(course){
+    const deletePromises = []
+    if(course.thumbnailPublicId){
+      deletePromises.push(cloudinary.uploader.destroy(course.thumbnailPublicId,{resource_type:"image"}))
+    }
+
+    const videoDelete = course.modules.flatMap((module)=>{
+        module.videos.map((video)=>{
+          cloudinary.uploader.destroy(video.videoPublicId,{resource_type:"video"})
+        })
+      })
+    
+    const allPromises = [...deletePromises, ...videoDelete]
+    await Promise.all(allPromises)
+    res.status(200).json({success:true, message:"Course deleted successfully"})
+  }
+
+  if(!course){
+    return res.status(404).json({success:false, message:"Either course not found or not in draft state"})
+  }
+}
+catch{
+  res.status(500).json({success:false, message:"Internal server error"})
+}
+}
+
 export const submitCourseReview = async (req,res) => {
   const instructorId = req.user._id
   let {courseId} = req.params
@@ -811,5 +843,42 @@ export const submitCourseReview = async (req,res) => {
   }
   finally{
      session.endSession()
+  }
+}
+
+export const getCourseAnalytics = async(req,res) => {
+  const instructorId = req.user._id
+  console.log(req.user)
+  const {courseId} = req.params
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    return res.status(400).json({ success: false, message: "Invalid courseId" });
+  }
+  try {
+      const analytics = await authCourse.aggregate([
+    {$match:{instructor:instructorId,_id:new mongoose.Types.ObjectId(courseId)}},
+    {$lookup:{
+      from:"enrollments",
+      localField:"_id",
+      foreignField:"course",
+      as:"enrollments"
+    }},{
+      $project:{
+        title:1,
+        status:1,
+        averageRating:1,
+        ratingCount:1,
+        totalEnrollment:{$size:"$enrollments"}
+      }
+    }
+  ])
+
+  if(!analytics.length){
+    return res.status(400).json({success:false, message:"Course not found or unauthorized"})
+  }
+
+  res.status(200).json({success:true,analytics:analytics[0]})
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({success:false,message:"Internal server error"})
   }
 }

@@ -45,6 +45,20 @@ Currently in **active development**, built with scalability, security, and clean
 
 ---
 
+## Authentication Flow
+
+1. User logs in and receives:
+   - Short-lived JWT access token
+   - Long-lived refresh token stored in Redis
+2. Access token is used for protected routes
+3. When access token expires:
+   - Client calls refresh endpoint
+   - Backend validates refresh token from Redis
+   - Issues a new access token
+4. On logout or admin block:
+   - Refresh token is deleted from Redis
+   - Session is invalidated immediately
+
 ## Instructor Course Management (Implemented)
 
 | Feature | Status | Details |
@@ -114,6 +128,15 @@ To ensure **fast API responses** and **non-blocking workflows**, the backend use
 - Decouples critical business logic from IO-heavy tasks
 
 ---
+
+## Key Design Decisions
+
+- Redis-backed refresh tokens for instant logout and user blocking
+- Frontend-direct Cloudinary uploads to avoid backend file streaming
+- Single BullMQ worker to prevent duplicate email processing
+- Incremental course rating calculation to avoid heavy aggregations
+- Draft → Review → Publish workflow mirroring real LMS moderation systems
+
 
 ### Email Background Processing
 
@@ -356,6 +379,14 @@ erDiagram
 > - Video playback
 > - Writing or updating course reviews
 
+## Known Limitations & Future Improvements
+
+- Payment gateway integration not implemented
+- Instructor revenue analytics not implemented
+- Admin dashboard UI not included (API-only project)
+- Search relevance can be improved with weighted indexes
+
+
 ## Folder Structure
 
 ```bash
@@ -398,4 +429,22 @@ thinkbot-backend/
 
 ### Frontend
 - FRONTEND_URL=https://thinkbot-yourapp.vercel.app
+
+---
+
+## Getting Started (Local Setup)
+
+### Prerequisites
+- Node.js v20+
+- MongoDB Atlas account
+- Redis instance (local or cloud)
+- Cloudinary account
+
+### Installation
+```bash
+git clone https://github.com/your-username/thinkbot-backend.git
+cd thinkbot-backend
+npm install
+npm run dev    //Run api main server
+npm run worker //Run background worker(Emails)
 
