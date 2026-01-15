@@ -6,8 +6,6 @@ import { draftCourseValidation } from "../validation/draftCourse.js";
 import mongoose from "mongoose";
 import courseReviewRequestModel from "../model/submitCourseReviewRequest.model.js";
 import * as crypto from "crypto";
-import { title } from "process";
-import { DELAY_TIME_1, tryCatch } from "bullmq";
 
 export const getAllCourses = async (req, res) => {
   try {

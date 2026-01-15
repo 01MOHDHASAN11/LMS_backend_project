@@ -1,8 +1,6 @@
 import { Queue } from "bullmq";
+import { bullRedisConfig } from "../config/bullmqRedis.js";
 
 export const emailDLQ = new Queue("email-dlq", {
-  connection: {
-    host: "localhost",
-    port: 6379,
-  },
+  connection: bullRedisConfig
 });

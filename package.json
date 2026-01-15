@@ -7,8 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "worker:email": "nodemon queues/email.worker.js",
-    "worker:resume": "nodemon queues/instructorVerification.worker.js"
+    "worker": "nodemon queues/email.worker.js"
   },
   "keywords": [],
   "author": "",

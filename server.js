@@ -17,7 +17,7 @@ import studentRoutes from "./routes/student.route.js";
 import { serverAdapter } from "./queues/dashboard/bullBoard.js";
 import { bullBoardAuth } from "./middleware/bullBoard.middleware.js";
 dotenv.config();
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 connectDB();
 
 const app = express();
@@ -33,7 +33,8 @@ const globalLimiter = async (req, res, next) => {
   }
 
   try {
-    const clientIP = req.ip || req.connection.remoteAddress;
+    const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.ip;
+
     await rateLimiter.consume(clientIP);
     next();
   } catch {
@@ -49,9 +50,9 @@ app.use(mongoSanitize({ replaceWith: "_" }));
 app.use(cookieParser());
 app.use(xss());
 app.use(hpp());
-app.use(cors());
+app.use(cors({origin:process.env.FRONTEND_URL}));
 app.use(globalLimiter);
-app.use(morgan("dev"));
+app.use(morgan("combined"));
 
 app.use("/api/auth", auth);
 app.use("/admin", adminRoute);

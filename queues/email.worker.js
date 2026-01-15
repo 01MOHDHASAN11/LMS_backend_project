@@ -7,6 +7,7 @@ import {
 } from "../utils/adminUnblockStatusUpdateEmail.js";
 import { sendCourseReviewEmail } from "../utils/submitCourseReview.utils.js";
 import { emailDLQ } from "./deadDLQ.queue.js";
+import { bullRedisConfig } from "../config/bullmqRedis.js";
 
 const workers = new Worker(
   "email-queue",
@@ -63,7 +64,7 @@ const workers = new Worker(
     }
   },
   {
-    connection: { host: "localhost", port: 6379 },
+    connection: bullRedisConfig,
   }
 );
 
