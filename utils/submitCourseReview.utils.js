@@ -1,21 +1,21 @@
-import nodemailer from "nodemailer"
-import dotenv from "dotenv"
-dotenv.config()
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+dotenv.config();
 
 const transporter = nodemailer.createTransport({
-    service:"gmail",
-    auth:{
-        user:process.env.EMAIL_USER,
-        pass:process.env.EMAIL_PASSWORD
-    }
-})
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+});
 
 export const sendCourseReviewEmail = async ({
   toEmail,
   instructorName,
   courseTitle,
   status, // "approved" | "rejected"
-  feedback = ""
+  feedback = "",
 }) => {
   const isApproved = status === "approved";
 

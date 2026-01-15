@@ -5,7 +5,6 @@ import cloudinary from "../config/cloudinary.js";
 import { courseReviewModel } from "../model/review.model.js";
 import redisClient from "../config/redis.js";
 
-
 export const getAllCourses = async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50); // max 50
@@ -283,27 +282,33 @@ export const saveVideoProgress = async (req, res) => {
       (v) => v.videoId.toString() === videoId.toString()
     );
 
-    const redisKey = `video:duration:${courseId}:${moduleId}:${videoId}`
-    let duration = await redisClient.get(redisKey)
+    const redisKey = `video:duration:${courseId}:${moduleId}:${videoId}`;
+    let duration = await redisClient.get(redisKey);
 
-    if(!duration){
-    const course = await authCourse.findById(courseId)
-    if(!course){
-      return res.status(404).json({success:false,message:"Course not found"})
-    }
-    const module = course.modules.id(moduleId)
-    if(!module){
-      return res.status(404).json({success:false,message:"Module not found"})
-    }
-    const video = module.videos.id(videoId)
-    if(!video){
-      return res.status(404).json({success:false,message:"Video not found"})
-    }
-    duration = video.duration
+    if (!duration) {
+      const course = await authCourse.findById(courseId);
+      if (!course) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Course not found" });
+      }
+      const module = course.modules.id(moduleId);
+      if (!module) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Module not found" });
+      }
+      const video = module.videos.id(videoId);
+      if (!video) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Video not found" });
+      }
+      duration = video.duration;
 
-    await redisClient.set(redisKey,duration)
+      await redisClient.set(redisKey, duration);
     }
-    duration=Number(duration)
+    duration = Number(duration);
 
     const safeWatchedSeconds = Math.min(Math.max(watchedSeconds, 0), duration);
     const completed = safeWatchedSeconds / duration >= 0.9;
@@ -527,7 +532,7 @@ export const getCourseReview = async (req, res) => {
   const page = Math.max(parseInt(req.query.page || 1), 1);
   const skip = (page - 1) * limit;
   let sortOrder;
-  sortOrder=req.query.sortOrder === "oldest" ? 1 : -1;
+  sortOrder = req.query.sortOrder === "oldest" ? 1 : -1;
   try {
     const courseExists = await authCourse.findById({ _id: courseId });
     if (!courseExists) {
@@ -535,7 +540,7 @@ export const getCourseReview = async (req, res) => {
         .status(404)
         .json({ success: false, message: "COurse not found" });
     }
-    const avgRating = courseExists.averageRating
+    const avgRating = courseExists.averageRating;
     const reviews = await courseReviewModel
       .find({ course: courseId })
       .populate({
@@ -549,19 +554,17 @@ export const getCourseReview = async (req, res) => {
       course: courseId,
     });
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        totalReviews,
-        totalPages: Math.ceil(totalReviews / limit),
-        page,
-        reviews,
-        limit,
-        avgRating
-      });
+    return res.status(200).json({
+      success: true,
+      totalReviews,
+      totalPages: Math.ceil(totalReviews / limit),
+      page,
+      reviews,
+      limit,
+      avgRating,
+    });
   } catch (error) {
-    console.error(error)
+    console.error(error);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });

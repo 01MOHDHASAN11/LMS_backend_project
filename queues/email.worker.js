@@ -1,7 +1,10 @@
 import { Worker } from "bullmq";
 import { sendVerificationEmail } from "../utils/signupEmailVerify.js";
 import { resetPasswordEmail } from "../utils/resetPasswordMail.js";
-import { sendInstructorVerificationEmail, sendUnblockStatusEmail } from "../utils/adminUnblockStatusUpdateEmail.js";
+import {
+  sendInstructorVerificationEmail,
+  sendUnblockStatusEmail,
+} from "../utils/adminUnblockStatusUpdateEmail.js";
 import { sendCourseReviewEmail } from "../utils/submitCourseReview.utils.js";
 import { emailDLQ } from "./deadDLQ.queue.js";
 
@@ -48,12 +51,12 @@ const workers = new Worker(
           job.data.message
         );
 
-        case "forget-password-email":
+      case "forget-password-email":
         return resetPasswordEmail(
-            job.data.toEmail,
-            job.data.token,
-            job.data.userName
-        )
+          job.data.toEmail,
+          job.data.token,
+          job.data.userName
+        );
 
       default:
         throw new Error(`Unknown email job: ${job.name}`);
@@ -64,20 +67,24 @@ const workers = new Worker(
   }
 );
 
-workers.on("failed",async(job,err)=>{
-    await emailDLQ.add(job.name,{
-        originalJobId:job.id,
-        queue:job.queueName,
-        jobName:job.name,
-        data:job.data,
-        error:{
-            message:err.message,
-            stack:err.stack
-        },
-        failedAt:new Date().toISOString()
-    },{
-        removeOnComplete:false,
-        removeOnFail:false
-    })
-    console.error(`Email job failed and moved to DLQ ${job.id} ${job.name}`)
-})
+workers.on("failed", async (job, err) => {
+  await emailDLQ.add(
+    job.name,
+    {
+      originalJobId: job.id,
+      queue: job.queueName,
+      jobName: job.name,
+      data: job.data,
+      error: {
+        message: err.message,
+        stack: err.stack,
+      },
+      failedAt: new Date().toISOString(),
+    },
+    {
+      removeOnComplete: false,
+      removeOnFail: false,
+    }
+  );
+  console.error(`Email job failed and moved to DLQ ${job.id} ${job.name}`);
+});

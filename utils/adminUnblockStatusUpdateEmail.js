@@ -10,7 +10,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const sendUnblockStatusEmail = async (toEmail, userName, status, adminMessage = "") => {
+export const sendUnblockStatusEmail = async (
+  toEmail,
+  userName,
+  status,
+  adminMessage = ""
+) => {
   const subject =
     status === "approved"
       ? "Your Account Unblock Request Has Been Approved"
@@ -68,10 +73,12 @@ export const sendUnblockStatusEmail = async (toEmail, userName, status, adminMes
   }
 };
 
-
-
-
-export const sendInstructorVerificationEmail = async (toEmail, userName, status, adminMessage = "") => {
+export const sendInstructorVerificationEmail = async (
+  toEmail,
+  userName,
+  status,
+  adminMessage = ""
+) => {
   const subject =
     status === "approved"
       ? "Your Instructor Verification is Approved"

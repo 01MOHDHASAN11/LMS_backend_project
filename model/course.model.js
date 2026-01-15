@@ -1,73 +1,77 @@
 import mongoose from "mongoose";
 
 const videoSchema = mongoose.Schema({
-    title:{type:String,required:true},
-    videoUrl:{type:String,required:true},
-    videoPublicId:{type:String,required:true},
-    duration:{type:Number,required:true},
-    videoSizeInBytes:{type:Number,required:true},
-    order:{type:Number,required:true},
-    createdAt:{type:Date,default:Date.now},
-    updatedAt:{type:Date}
-})
+  title: { type: String, required: true },
+  videoUrl: { type: String, required: true },
+  videoPublicId: { type: String, required: true },
+  duration: { type: Number, required: true },
+  videoSizeInBytes: { type: Number, required: true },
+  order: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date },
+});
 
 const moduleSchema = mongoose.Schema({
-    title:{type:String,required:true},
-    videos:[videoSchema],
-    moduleDuration:{type:Number},
-    order:{type:Number,required:true},
-    createdAt:{type:Date,default:Date.now},
-    updatedAt:{type:Date}
-})
-
+  title: { type: String, required: true },
+  videos: [videoSchema],
+  moduleDuration: { type: Number },
+  order: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date },
+});
 
 const courseSchema = mongoose.Schema({
-    title:{type:String,required:true},
-    description:{type:String,required:true},
-    price:{type:Number,required:true},
-    thumbnailUrl:{type:String,required:true},
-    thumbnailPublicId:{type:String,required:true},
-    category:{type:String,required:true},
-    tags:{type:[String],required:true},
-    instructor:{type:mongoose.Schema.Types.ObjectId,ref:"userAuth",required:true,index:true},
-    modules:[moduleSchema],
-    courseDuration:{type:Number},
-    status:{type:String,enum:["draft","review","published"]},
-    publishedAt:{type:Date},
-    submittedForReviewAt:{type:Date},
-    reviewedAt:{type:Date},
-    reviewResponse:{
-        decision:{
-            type:String,
-            enum:["approved","rejected"]
-        },
-        feedback:String,
-        reviewer:{
-            type:mongoose.Schema.Types.ObjectId,
-            ref:"userAuth"
-        }
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  price: { type: Number, required: true },
+  thumbnailUrl: { type: String, required: true },
+  thumbnailPublicId: { type: String, required: true },
+  category: { type: String, required: true },
+  tags: { type: [String], required: true },
+  instructor: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "userAuth",
+    required: true,
+    index: true,
+  },
+  modules: [moduleSchema],
+  courseDuration: { type: Number },
+  status: { type: String, enum: ["draft", "review", "published"] },
+  publishedAt: { type: Date },
+  submittedForReviewAt: { type: Date },
+  reviewedAt: { type: Date },
+  reviewResponse: {
+    decision: {
+      type: String,
+      enum: ["approved", "rejected"],
     },
-    ratingCount:{
-        type:Number,
-        default:0
+    feedback: String,
+    reviewer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "userAuth",
     },
-    averageRating:{
-        type:Number,
-        default:0
-    },
-    createdAt:{type:Date,default:Date.now},
-    updatedAt:{type:Date,default:Date.now},
-})
+  },
+  ratingCount: {
+    type: Number,
+    default: 0,
+  },
+  averageRating: {
+    type: Number,
+    default: 0,
+  },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
 
-courseSchema.index({title:"text", description:"text"})
-courseSchema.index({category:1})
-courseSchema.index({tags:1})
+courseSchema.index({ title: "text", description: "text" });
+courseSchema.index({ category: 1 });
+courseSchema.index({ tags: 1 });
 courseSchema.index(
-    {instructor:1,status:1},
-    {unique:true,partialFilterExpression:{status:"pending"}}
-)
-courseSchema.index({updatedAt:-1})
+  { instructor: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "pending" } }
+);
+courseSchema.index({ updatedAt: -1 });
 
-const authCourse = mongoose.model("course",courseSchema)
+const authCourse = mongoose.model("course", courseSchema);
 
-export default authCourse
+export default authCourse;
