@@ -1,6 +1,7 @@
 import "./server.js";
 
 // start worker AFTER server boots
-// setTimeout(() => {
-//   import("./queues/email.worker.js");
-// }, 5000);
+setTimeout(() => {
+    console.log("Starting email worker")
+  import("./queues/email.worker.js");
+}, 5000);
