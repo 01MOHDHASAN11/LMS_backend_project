@@ -39,5 +39,8 @@
     "rate-limiter-flexible": "^8.2.0",
     "redis": "^5.10.0",
     "winston": "^3.18.3"
-  }
+  },
+  "engines": {
+  "node": "18.x"
+}
 }

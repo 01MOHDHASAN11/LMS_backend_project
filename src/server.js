@@ -18,7 +18,7 @@ import { serverAdapter } from "./queues/dashboard/bullBoard.js";
 import { bullBoardAuth } from "./middleware/bullBoard.middleware.js";
 dotenv.config();
 const port = process.env.PORT || 5000;
-connectDB();
+
 
 const app = express();
 
@@ -70,4 +70,5 @@ app.use((err, req, res, next) => {
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  connectDB();
 });
