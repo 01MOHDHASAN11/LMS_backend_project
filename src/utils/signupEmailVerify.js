@@ -1,13 +1,18 @@
 import nodemailer from "nodemailer";
-import sendinBlueTransport from "nodemailer-sendinblue";
 import dotenv from "dotenv";
 dotenv.config();
 
-const transporter = nodemailer.createTransport(
-  sendinBlueTransport({
-    apiKey:process.env.BREVO_API_KEY
-  })
-);
+
+const transporter = nodemailer.createTransport({
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_LOGIN,      // from Brevo SMTP page
+    pass: process.env.SMTP_PASSWORD    // from Brevo SMTP page
+  }
+});
+
 
 export const sendVerificationEmail = async (toEmail, token, userName) => {
   const verifyLink = `${process.env.FRONTEND_URL}/verify/${token}`;
