@@ -36,9 +36,12 @@ export const updateCourse = async (req, res) => {
     redisClient.del(`instructor:${instructorId}`);
     const { title, description } = req.body;
     const { courseId } = req.params;
+    if(!mongoose.Types.ObjectId.isValid(courseId)){
+      return res.status(400).json({success:false,message:"Invalid courseId"})
+    }
     const course = await authCourse.findById(courseId);
     if (!course)
-      return res.status(404).json({ message: "NO course found by this ID" });
+      return res.status(404).json({ message: "No course found by this ID" });
     if (course.instructor.toString() !== instructorId.toString()) {
       return res
         .status(403)

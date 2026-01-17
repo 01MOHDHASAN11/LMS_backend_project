@@ -190,160 +190,6 @@ export const getCourseDetails = async (req, res) => {
   }
 };
 
-export const playVideo = async (req, res) => {
-  const studentId = req.user._id;
-  const { courseId, moduleId, videoId } = req.params;
-  if (
-    !mongoose.Types.ObjectId.isValid(courseId) ||
-    !mongoose.Types.ObjectId.isValid(moduleId) ||
-    !mongoose.Types.ObjectId.isValid(videoId)
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid courseId, moduleId or videoId",
-    });
-  }
-  try {
-    const isEnrolled = await courseEnrollmentModel.exists({
-      student: studentId,
-      course: courseId,
-    });
-    if (!isEnrolled) {
-      return res
-        .status(403)
-        .json({ success: false, message: "User is not enrolled" });
-    }
-    const course = await authCourse.findById(courseId);
-    if (!course || course.status !== "published") {
-      return res
-        .status(404)
-        .json({ success: false, message: "Course not available" });
-    }
-
-    const module = course.modules.id(moduleId);
-    if (!module) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Module not found" });
-    }
-
-    const video = module.videos.id(videoId);
-    if (!video) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Video not found" });
-    }
-
-    const expiresIn = 600;
-    const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
-
-    const signedUrl = cloudinary.url(video.videoPublicId, {
-      resource_type: "video",
-      sign_url: true,
-      secure: true,
-      expires_at: expiresAt,
-    });
-
-    res.status(200).json({
-      success: true,
-      videoUrl: signedUrl,
-      expiresIn,
-      expiresAt,
-    });
-  } catch (error) {
-    console.error("Error: ", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-export const saveVideoProgress = async (req, res) => {
-  const studentId = req.user._id;
-  const { moduleId, videoId, courseId, watchedSeconds } = req.body;
-  if (
-    !mongoose.Types.ObjectId.isValid(moduleId) ||
-    !mongoose.Types.ObjectId.isValid(videoId) ||
-    !mongoose.Types.ObjectId.isValid(courseId)
-  ) {
-    return res.status(400).json({ success: false, message: "Invalid ids" });
-  }
-
-  try {
-    const enrollment = await courseEnrollmentModel.findOne({
-      course: courseId,
-      student: studentId,
-    });
-    if (!enrollment) {
-      return res
-        .status(403)
-        .json({ success: false, message: "User not enrolled" });
-    }
-
-    const index = enrollment.videoProgress.findIndex(
-      (v) => v.videoId.toString() === videoId.toString()
-    );
-
-    const redisKey = `video:duration:${courseId}:${moduleId}:${videoId}`;
-    let duration = await redisClient.get(redisKey);
-
-    if (!duration) {
-      const course = await authCourse.findById(courseId);
-      if (!course) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Course not found" });
-      }
-      const module = course.modules.id(moduleId);
-      if (!module) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Module not found" });
-      }
-      const video = module.videos.id(videoId);
-      if (!video) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Video not found" });
-      }
-      duration = video.duration;
-
-      await redisClient.set(redisKey, duration);
-    }
-    duration = Number(duration);
-
-    const safeWatchedSeconds = Math.min(Math.max(watchedSeconds, 0), duration);
-    const completed = safeWatchedSeconds / duration >= 0.9;
-
-    if (index >= 0) {
-      enrollment.videoProgress[index].watchedSeconds = Math.max(
-        enrollment.videoProgress[index].watchedSeconds,
-        safeWatchedSeconds
-      );
-      enrollment.videoProgress[index].completed =
-        enrollment.videoProgress[index].completed || completed;
-      enrollment.videoProgress[index].lastWatchedAt = new Date();
-    } else {
-      enrollment.videoProgress.push({
-        moduleId,
-        videoId,
-        completed,
-        watchedSeconds: safeWatchedSeconds,
-        duration,
-        lastWatchedAt: new Date(),
-      });
-    }
-
-    enrollment.progress = await calculateCourseProgress(enrollment);
-    enrollment.isCompleted = enrollment.progress === 100;
-    await enrollment.save();
-    return res
-      .status(200)
-      .json({ success: true, message: "Video progress is saved into DB" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
 export const enrollInCourse = async (req, res) => {
   const studentId = req.user._id;
   const { courseId } = req.params;
@@ -431,6 +277,161 @@ export const getMyEnrolledCourses = async (req, res) => {
       .json({ success: false, message: "Internal server error" });
   }
 };
+
+export const playVideo = async (req, res) => {
+  const studentId = req.user._id;
+  const { courseId, moduleId, videoId } = req.params;
+  if (
+    !mongoose.Types.ObjectId.isValid(courseId) ||
+    !mongoose.Types.ObjectId.isValid(moduleId) ||
+    !mongoose.Types.ObjectId.isValid(videoId)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid courseId, moduleId or videoId",
+    });
+  }
+  try {
+    const isEnrolled = await courseEnrollmentModel.exists({
+      student: studentId,
+      course: courseId,
+    });
+    if (!isEnrolled) {
+      return res
+        .status(403)
+        .json({ success: false, message: "User is not enrolled" });
+    }
+    const course = await authCourse.findById(courseId);
+    if (!course || course.status !== "published") {
+      return res
+        .status(404)
+        .json({ success: false, message: "Course not available" });
+    }
+
+    const module = course.modules.id(moduleId);
+    if (!module) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Module not found" });
+    }
+
+    const video = module.videos.id(videoId);
+    if (!video) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
+    }
+
+    const expiresIn = 600;
+    const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
+
+    const signedUrl = cloudinary.url(video.videoPublicId, {
+      resource_type: "video",
+      sign_url: true,
+      secure: true,
+      expires_at: expiresAt,
+    });
+
+    res.status(200).json({
+      success: true,
+      videoUrl: signedUrl,
+      expiresIn,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error("Error: ", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const saveVideoProgress = async (req, res) => {
+  const studentId = req.user._id;
+  const { moduleId, videoId, courseId, watchedSeconds } = req.params;
+  if (
+    !mongoose.Types.ObjectId.isValid(moduleId) ||
+    !mongoose.Types.ObjectId.isValid(videoId) ||
+    !mongoose.Types.ObjectId.isValid(courseId)
+  ) {
+    return res.status(400).json({ success: false, message: "Invalid ids" });
+  }
+
+  try {
+    const enrollment = await courseEnrollmentModel.findOne({
+      course: courseId,
+      student: studentId,
+    });
+    if (!enrollment) {
+      return res
+        .status(403)
+        .json({ success: false, message: "User not enrolled" });
+    }
+
+    const index = enrollment.videoProgress.findIndex(
+      (v) => v.videoId.toString() === videoId.toString()
+    );
+
+    const redisKey = `video:duration:${courseId}:${moduleId}:${videoId}`;
+    let duration = await redisClient.get(redisKey);
+
+    if (!duration) {
+      const course = await authCourse.findById(courseId);
+      if (!course) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Course not found" });
+      }
+      const module = course.modules.id(moduleId);
+      if (!module) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Module not found" });
+      }
+      const video = module.videos.id(videoId);
+      if (!video) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Video not found" });
+      }
+      duration = video.duration;
+
+      await redisClient.set(redisKey, duration);
+    }
+    duration = Number(duration);
+
+    const safeWatchedSeconds = Math.min(Math.max(watchedSeconds, 0), duration);
+    const completed = safeWatchedSeconds / duration >= 0.9;
+
+    if (index >= 0) {
+      enrollment.videoProgress[index].watchedSeconds = Math.max(
+        enrollment.videoProgress[index].watchedSeconds,
+        safeWatchedSeconds
+      );
+      enrollment.videoProgress[index].completed =
+        enrollment.videoProgress[index].completed || completed;
+      enrollment.videoProgress[index].lastWatchedAt = new Date();
+    } else {
+      enrollment.videoProgress.push({
+        moduleId,
+        videoId,
+        completed,
+        watchedSeconds: safeWatchedSeconds,
+        duration,
+        lastWatchedAt: new Date(),
+      });
+    }
+
+    enrollment.progress = await calculateCourseProgress(enrollment);
+    enrollment.isCompleted = enrollment.progress === 100;
+    await enrollment.save();
+    return res
+      .status(200)
+      .json({ success: true, message: "Video progress is saved into DB" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 
 export const addCourseReview = async (req, res) => {
   const studentId = req.user._id;

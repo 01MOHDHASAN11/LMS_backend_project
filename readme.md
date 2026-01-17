@@ -142,6 +142,18 @@ To ensure **fast API responses** and **non-blocking workflows**, the backend use
 
 All email-related tasks are processed **asynchronously** using a **single BullMQ queue** (`email-queue`) and **one worker** with a switch-case strategy.
 
+### Email Delivery Architecture
+
+All emails are sent via **Brevo REST API** (not SMTP) to ensure reliable delivery on cloud hosting platforms.
+
+**Why Brevo API?**
+- ✅ Avoids SMTP port blocking on platforms like Render
+- ✅ Better deliverability & sender reputation
+- ✅ HTTPS-based communication (more reliable & secure)
+- ✅ Built-in retry mechanisms & detailed delivery logs
+
+**Migration Note:** Initially used nodemailer with SMTP, but migrated to `@getbrevo/brevo` REST API due to SMTP timeout issues on Render (ports 587/465 blocked).
+
 #### Supported Background Email Jobs
 - Signup email verification
 - Forgot password email
@@ -386,6 +398,33 @@ erDiagram
 - Admin dashboard UI not included (API-only project)
 - Search relevance can be improved with weighted indexes
 
+## Tech Stack
+
+**Core Framework**
+- Node.js + Express.js
+
+**Database & Caching**
+- MongoDB Atlas (Mongoose ODM)
+- Redis (Session management & BullMQ)
+
+**Authentication & Security**
+- JWT (jsonwebtoken)
+- bcryptjs (password hashing)
+- helmet, express-mongo-sanitize, express-xss-sanitizer, hpp
+
+**Background Jobs**
+- BullMQ + Redis
+
+**Email Service**
+- Brevo API (`@getbrevo/brevo`)
+
+**File Storage**
+- Cloudinary (videos, images, PDFs)
+
+**Rate Limiting**
+- rate-limiter-flexible
+
+---
 
 ## Folder Structure
 
@@ -407,6 +446,208 @@ thinkbot-backend/
 
 ```
 
+---
+
+## API Routes Documentation
+
+### Public Routes (No Authentication Required)
+
+#### Authentication
+```
+POST   /api/auth/signup                    # Create new account (rate-limited: 5/email, 10/IP per hour)
+POST   /api/auth/signin                    # Login with credentials (rate-limited: 5/email, 10/IP per 15min)
+GET    /api/auth/verify/:token             # Verify email address
+GET    /api/auth/forget-password           # Request password reset (rate-limited: 5/email, 20/IP per hour)
+POST   /api/auth/reset-password/:token     # Reset password with token
+POST   /api/auth/refresh-token             # Get new access token from refresh token
+POST   /api/auth/logout                    # Logout and invalidate session
+```
+
+---
+
+### Protected Routes (Authentication Required)
+
+#### Student Routes (`/student`)
+**All routes require:** `Authorization: Bearer <token>` + Role: `student`
+```
+GET    /student/courses/filter                        # Browse published courses (with filters)
+GET    /student/course/course-detail/:courseId        # Get course details (preview or full based on enrollment)
+POST   /student/course/enrollInCourse/:courseId       # Enroll in a course
+GET    /student/course/getEnrolledCourses             # Get all enrolled courses
+POST   /student/course/addReview/:courseId            # Write or update course review
+GET    /student/course/get-course-review/:courseId    # Get course review by students
+GET    /play-video/course/:courseId/module/:moduleId/video/:videoId          # Get signed url of video to play it on frontend          
+PATCH  /student/course/:courseId/module/:moduleId/video/:videoId/progress    # Save video progress
+```
+
+---
+
+#### Instructor Routes (`/instructor`)
+**All routes require:** `Authorization: Bearer <token>` + Role: `instructor`
+
+**Profile & Verification**
+```
+POST   /instructor/instructor-verification            # Apply for instructor verification
+GET    /instructor/verification-request               # View own verification request status
+GET    /instructor/get-signature                      # Get Cloudinary signed upload signature
+```
+
+**Course Management** (⚠️ Requires instructor verification)
+```
+POST   /instructor/draft-course                       # Create new course in draft mode
+GET    /instructor/get-all-courses                    # Get all own courses
+PUT    /instructor/course-update/:courseId            # Update course metadata
+DELETE /instructor/delete-course/:courseId            # Delete a course
+GET    /instructor/analytics/course/:courseId         # Get course analytics
+```
+
+**Module Management** (⚠️ Requires instructor verification)
+```
+POST   /instructor/course/:draftCourseId/add-module           # Add module to course
+PUT    /instructor/course/:courseId/reorder-module            # Reorder modules
+DELETE /instructor/delete-module/course/:courseId/module/:moduleId   # Delete module
+```
+
+**Video Management** (⚠️ Requires instructor verification)
+```
+POST   /instructor/add-video/course/:courseId/module/:moduleId              # Add video to module
+PUT    /instructor/course/:courseId/module/:moduleId/reorder-videos         # Reorder videos in module
+DELETE /instructor/delete-video/course/:courseId/module/:moduleId/video/:videoId   # Delete video
+```
+
+**Course Review Workflow** (⚠️ Requires instructor verification)
+```
+POST   /instructor/course/:courseId/review-request    # Submit course for admin review
+GET    /instructor/course-review/:courseId            # Get course review status/feedback
+```
+
+> **Note:** After getting signature from `/instructor/get-signature`, upload files directly to Cloudinary:
+> ```
+> POST https://api.cloudinary.com/v1_1/<cloud_name>/<upload-type>/upload
+> Upload types: image | raw | video
+> Form-data: file, signature, api_key, folder, timestamp
+> ```
+
+---
+
+#### Admin Routes (`/admin`)
+**All routes require:** `Authorization: Bearer <token>` + Role: `admin`
+
+**User Management**
+```
+PUT    /admin/get-user/:userId                        # Block user (permanent/temporary)
+GET    /admin/review-unblock/get-users                # Get all unblock requests
+GET    /admin/pending-request                         # Get pending unblock requests
+PUT    /admin/status/update-user/:requestId           # Approve/reject unblock request
+```
+
+**Instructor Verification**
+```
+GET    /admin/verification/request                    # Get instructor verification requests (with filters)
+GET    /admin/verification/request/:id                # Get single verification request details
+PATCH  /admin/verification/request/:id                # Approve/reject instructor verification
+```
+
+**Course Review**
+```
+PATCH  /admin/draft-course/review-request/:requestId  # Approve/reject submitted course
+```
+
+**Queue Monitoring**
+```
+GET    /admin/queues                                  # BullMQ dashboard (requires Basic Auth)
+```
+
+---
+
+#### Common Routes (`/common`)
+**Available to all authenticated users**
+```
+POST   /common/unblock-request                        # Request account unblock (for blocked users)
+```
+
+---
+
+### Global Routes
+```
+GET    /api/auth/profile                              # Get current user profile (requires auth)
+PUT    /api/auth/change-password                      # Change password (requires auth)
+```
+
+---
+
+### Response Format
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": { ... }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Error description"
+}
+```
+
+---
+
+### Authentication & Authorization
+
+**Headers Required:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Rate Limiting:**
+- Signup: 5 requests per email, 10 per IP per hour
+- Signin: 5 requests per email, 10 per IP per 15 minutes
+- Forget Password: 5 requests per email, 20 per IP per hour
+- Global: 100 requests per IP per 15 minutes
+
+**Role-Based Access:**
+- Student routes: Only accessible by users with `student` role
+- Instructor routes: Only accessible by users with `instructor` role
+- Admin routes: Only accessible by users with `admin` role
+- Some instructor routes additionally require verification approval
+
+---
+
+### Special Middleware Guards
+
+| Route Pattern | Additional Check |
+|--------------|------------------|
+| `/instructor/draft-course` onwards | Requires `isInstructorVerified` |
+| `/api/auth/signin` | Checks `isUserBlocked` |
+| `/admin/queues` | Requires Basic Auth (separate from JWT) |
+
+---
+
+### Cloudinary Upload Flow
+
+1. **Get Signature:**
+```
+   GET /instructor/get-signature
+   Response: { signature, timestamp, api_key, folder }
+```
+
+2. **Upload to Cloudinary:**
+```
+   POST https://api.cloudinary.com/v1_1/{cloud_name}/{resource_type}/upload
+   Form-data: file, signature, api_key, folder, timestamp
+```
+
+3. **Send Cloudinary Response to Backend:**
+   Include `secure_url`, `public_id`, `bytes`, `resource_type` in your subsequent API calls
+
+---
+
+
 ## Environment Variables
 
 ### Server
@@ -423,9 +664,9 @@ thinkbot-backend/
 - REFRESH_TOKEN=your_even_stronger_refresh_token_secret
 - JWT_SECRET=fallback_strong_secret
 
-### Email (SMTP / Nodemailer)
+### Email (Brevo API)
 - EMAIL_USER=your-email@example.com
-- EMAIL_PASSWORD=your_app_password
+- BREVO_API_KEY=your_brevo_api_key_here
 
 ### Frontend
 - FRONTEND_URL=https://thinkbot-yourapp.vercel.app
@@ -435,16 +676,60 @@ thinkbot-backend/
 ## Getting Started (Local Setup)
 
 ### Prerequisites
-- Node.js v20+
+- Node.js v18+
 - MongoDB Atlas account
 - Redis instance (local or cloud)
 - Cloudinary account
+- **Brevo account** (for email delivery - get free API key at https://app.brevo.com)
+
 
 ### Installation
 ```bash
-git clone https://github.com/your-username/thinkbot-backend.git
-cd thinkbot-backend
+git clone https://github.com/01MOHDHASAN11/LMS_backend_project.git
+cd your-folder-name
 npm install
-npm run dev    //Run api main server
-npm run worker //Run background worker(Emails)
+```
 
+### Running the Application
+```bash
+# Terminal 1 - Run API server
+npm run dev
+
+# Terminal 2 - Run background worker (processes email jobs)
+npm run worker
+```
+
+**⚠️ Important:** Both the API server and worker must run simultaneously for full functionality (signup emails, password reset, course reviews, etc.).
+
+---
+
+## Deployment
+
+This project is production-ready and deployed on **Render** with:
+- **Web Service** (API server)
+- **Background Worker** (email processing)
+- **Redis** (Upstash Cloud Redis)
+- **MongoDB Atlas** (Database)
+
+**Production Considerations:**
+- SMTP ports (587/465) are blocked on Render → Using Brevo API instead
+- Both API server and worker deployed as separate services
+- Environment variables managed via Render dashboard
+- Redis connection pooling configured for production load
+
+**Live API:** `https://lms-backend-api-vf7d.onrender.com`
+
+**Cold Start Delay (Free Tier)**
+- Render's free tier spins down after 15 minutes of inactivity
+- First API request after sleep may take **50-60 seconds** to respond
+- Subsequent requests will be fast
+- Please be patient on the first request
+
+**Email Delivery**
+- Emails are sent successfully but **may land in spam folder**
+- This is expected because:
+  - No custom domain configured (using generic sender)
+  - SPF/DKIM/DMARC not set up
+  - Free Brevo account with limited sender reputation
+- **Action Required:** Check your spam/junk folder for verification emails
+- This will be resolved in production with a custom domain
