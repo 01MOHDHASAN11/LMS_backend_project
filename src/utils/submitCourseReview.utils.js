@@ -1,24 +1,21 @@
-import nodemailer from "nodemailer";
+import * as brevo from '@getbrevo/brevo';
 import dotenv from "dotenv";
 dotenv.config();
 
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port:587,
-  secure:false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Initialize Brevo API client
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(
+  brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
 
-export const sendCourseReviewEmail = async ({
+export const sendCourseReviewEmail = async (
   toEmail,
   instructorName,
   courseTitle,
-  status, // "approved" | "rejected"
-  feedback = "",
-}) => {
+  status,
+  feedback = ""
+) => {
   const isApproved = status === "approved";
 
   const subject = isApproved
@@ -26,71 +23,99 @@ export const sendCourseReviewEmail = async ({
     : "Your Course Review Needs Changes";
 
   const htmlContent = `
-  <div style="font-family: Arial, Helvetica, sans-serif; background:#f9f9f9; padding:20px;">
-    <div style="max-width:600px; margin:auto; background:#ffffff; padding:24px; border-radius:8px;">
+  <div style="font-family: Arial, sans-serif; background-color: #f4f6f8; padding: 40px;">
+    <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;">
       
-      <h2 style="color:#333;">Hello ${instructorName},</h2>
+      <div style="background-color: ${isApproved ? '#16a34a' : '#dc2626'}; padding: 20px;">
+        <h2 style="color: #ffffff; margin: 0;">
+          ${isApproved ? 'Course Approved! 🎉' : 'Course Review Results'}
+        </h2>
+      </div>
 
-      <p style="font-size:15px; color:#555;">
-        Your course <strong>"${courseTitle}"</strong> has been reviewed by our team.
-      </p>
+      <div style="padding: 30px; color: #333333;">
+        <p style="font-size: 16px;">Hello <strong>${instructorName}</strong>,</p>
 
-      ${
-        isApproved
-          ? `
-          <p style="font-size:16px; color:#2e7d32;">
-            ✅ <strong>Good news!</strong> Your course has been <strong>approved</strong> and is now live on the platform.
-          </p>
-          <p style="color:#555;">
-            Learners can now enroll and access your content.
-          </p>
-          `
-          : `
-          <p style="font-size:16px; color:#c62828;">
-            ❌ <strong>Your course was not approved at this time.</strong>
-          </p>
-          ${
-            feedback
-              ? `
-              <div style="margin-top:12px; padding:12px; background:#fff3f3; border-left:4px solid #e53935;">
-                <strong>Reviewer Feedback:</strong>
-                <p style="margin:8px 0 0; color:#555;">${feedback}</p>
-              </div>
-              `
-              : `
-              <p style="color:#555;">No specific feedback was provided.</p>
-              `
-          }
-          <p style="margin-top:12px; color:#555;">
-            You may update your course and submit it again for review.
-          </p>
-          `
-      }
+        <p style="font-size: 15px; line-height: 1.6;">
+          Your course <strong>"${courseTitle}"</strong> has been reviewed by our team.
+        </p>
 
-      <hr style="margin:24px 0; border:none; border-top:1px solid #eee;">
+        ${
+          isApproved
+            ? `
+            <div style="background-color: #f0fdf4; padding: 15px; border-left: 4px solid #16a34a; margin: 20px 0;">
+              <p style="margin: 0; font-size: 15px; color: #16a34a;">
+                ✅ <strong>Good news!</strong> Your course has been approved and is now live on the platform.
+              </p>
+            </div>
+            
+            <p style="font-size: 15px; line-height: 1.6; color: #555;">
+              Learners can now enroll and access your content. Congratulations on this achievement!
+            </p>
 
-      <p style="font-size:13px; color:#888;">
-        If you have any questions, feel free to contact our support team.
-      </p>
+            ${
+              feedback
+                ? `<div style="background-color: #f0fdf4; padding: 15px; border-left: 4px solid #16a34a; margin: 20px 0;">
+                     <p style="margin: 0; font-size: 14px;"><strong>Reviewer Note:</strong> ${feedback}</p>
+                   </div>`
+                : ""
+            }
+            `
+            : `
+            <div style="background-color: #fef2f2; padding: 15px; border-left: 4px solid #dc2626; margin: 20px 0;">
+              <p style="margin: 0; font-size: 15px; color: #dc2626;">
+                ❌ <strong>Your course was not approved at this time.</strong>
+              </p>
+            </div>
 
-      <p style="font-size:14px; color:#555;">
-        Regards,<br>
-        <strong>Course Review Team</strong>
-      </p>
+            ${
+              feedback
+                ? `
+                <div style="background-color: #fef2f2; padding: 15px; border-left: 4px solid #dc2626; margin: 20px 0;">
+                  <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Reviewer Feedback:</strong></p>
+                  <p style="margin: 0; font-size: 14px; color: #555;">${feedback}</p>
+                </div>
+                `
+                : `
+                <p style="font-size: 14px; color: #555;">No specific feedback was provided.</p>
+                `
+            }
+
+            <p style="font-size: 14px; color: #555; margin-top: 16px;">
+              You may update your course content and submit it again for review.
+            </p>
+            `
+        }
+
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+
+        <p style="font-size: 12px; color: #888;">
+          If you have any questions, feel free to contact our support team.
+        </p>
+
+        <p style="font-size: 12px; color: #888;">
+          Regards,<br/>
+          <strong>Course Review Team</strong>
+        </p>
+      </div>
     </div>
   </div>
   `;
 
-  try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: toEmail,
-      subject,
-      html: htmlContent,
-    });
+  const sendSmtpEmail = new brevo.SendSmtpEmail();
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.to = [{ email: toEmail, name: instructorName }];
+  sendSmtpEmail.sender = { 
+    email: process.env.EMAIL_USER, 
+    name: "Course Review Team" 
+  };
+  sendSmtpEmail.htmlContent = htmlContent;
 
-    console.log(`Course review email sent (${status})`);
+  try {
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`✅ Course review email (${status}) sent to ${instructorName} - Message ID: ${result.body.messageId}`);
+    return result;
   } catch (error) {
-    console.error("Error sending course review email:", error);
+    console.error("❌ Error sending course review email:", error.response?.body || error.message);
+    throw error;
   }
 };
