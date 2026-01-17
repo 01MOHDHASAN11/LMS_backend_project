@@ -9,7 +9,7 @@ import { sendCourseReviewEmail } from "../utils/submitCourseReview.utils.js";
 import { emailDLQ } from "./deadDLQ.queue.js";
 import { bullRedisConfig } from "../config/bullmqRedis.js";
 
-const workers = new Worker(
+export const workers = new Worker(
   "email-queue",
   async (job) => {
     switch (job.name) {
